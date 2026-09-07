@@ -51,13 +51,14 @@ renderer_make :: (window: *SDL_Window, backend: Backend_Kind, width: s32, height
 
     if #complete backend == {
     case .SOFTWARE;
-        ren.software.texture = SDL_CreateTexture(ren.renderer, .ARGB8888, .STREAMING, width, height);
+        soft := *ren.software;
+        soft.texture = SDL_CreateTexture(ren.renderer, .ARGB8888, .STREAMING, width, height);
         if !ren.software.texture {
             log_error("Couldn't create texture for software renderer: %", SDL_GetErrorString());
             return .{}, false;
         }
 
-        ren.software.framebuffer = framebuffer_make(width, height);
+        soft.framebuffer = framebuffer_make(width, height);
     case .GPU;
     }
 
@@ -82,11 +83,11 @@ renderer_draw :: (using ren: *Renderer)
     if #complete backend == {
     case .SOFTWARE;
         fb := *software.framebuffer;
-        framebuffer_clear(fb, .GREEN);
+        framebuffer_clear(fb, .BLACK);
         SDL_UpdateTexture(software.texture, null, fb.pixels.data, fb.width * size_of(u32));
         SDL_RenderTexture(renderer, software.texture, null, null);
     case .GPU;
-        SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
     }
 
