@@ -3,6 +3,19 @@
 
 #load "render/renderer.jai";
 
+engine_logger :: (message: string, data: *void, info: Log_Info)
+{
+    if !message  return;
+
+    prefix := "";
+    if info.common_flags & .ERROR then prefix = "ERRO: ";
+    else if info.common_flags & .WARNING then prefix = "WARN: ";
+    else prefix = "INFO: ";
+
+    newline := ifx message[message.count-1] == #char "\n" then "" else "\n";
+    write_strings(prefix, message, newline, to_standard_error = (info.common_flags & .ERROR) != 0);
+}
+
 Game_State :: struct
 {
     window: *SDL_Window;
@@ -29,7 +42,7 @@ app_init :: (app_state: **void, argc: s32, argv: **u8) -> SDL_AppResult
     }
 
     game_state.window = window;
-    game_state.renderer, ok = renderer_make(window, .GPU, 1920, 1080);
+    game_state.renderer, ok = renderer_make(window, .SOFTWARE, 1920, 1080);
     if !ok  return .FAILURE;
 
     return .CONTINUE;
@@ -69,5 +82,6 @@ app_quit :: (app_state: *void, result: SDL_AppResult)
 
 main :: ()
 {
+    context.logger = engine_logger;
     SDL_EnterAppMainCallbacks(app_init, app_iterate, app_event, app_quit);
 }
