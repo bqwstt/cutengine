@@ -1,50 +1,12 @@
 #scope_file
 
-Color :: enum u32 {
-    BLACK :: 0xFF_00_00_00;
-    WHITE :: 0xFF_FF_FF_FF;
-
-    RED   :: 0xFF_FF_00_00;
-    GREEN :: 0xFF_00_FF_00;
-    BLUE  :: 0xFF_00_00_FF;
-}
-
-Line :: struct {
-    from, to: Vector3;
-
-    #overlay (from) points: [2]Vector3;
-}
-
-Triangle :: struct {
-    a, b, c: Vector3;
-
-    #overlay (a) points: [3]Vector3;
-}
-
-project :: (camera: Camera, point: Vector3) -> Vector2 {
-    v: Vector2;
-    v.x = camera.fov * point.x / point.z;
-    v.y = camera.fov * point.y / point.z;
-    return v;
-}
-
-project_to_screen :: (camera: Camera, point: Vector3) -> Vector2 {
-    v := project(camera, point - camera.position);
-    v.x += WINDOW_WIDTH / 2.0;
-    v.y += WINDOW_HEIGHT / 2.0;
-    return v;
-}
-
-put_pixel :: (fb: Framebuffer, camera: Camera, x: s32, y: s32, color: Color)
+put_pixel :: (fb: Framebuffer, x: s32, y: s32, color: Color)
 {
-    tx := x - cast(s32) camera.position.x;
-    ty := y - cast(s32) camera.position.y;
-
-    if tx < 0 || tx >= fb.width || ty < 0 || ty >= fb.height  return; 
-    fb.pixels[(fb.width * ty) + tx] = xx color;
+    if x < 0 || x >= fb.width || y < 0 || y >= fb.height  return; 
+    fb.pixels[(fb.width * y) + x] = xx color;
 }
 
-draw_segment :: (fb: Framebuffer, camera: Camera, ax: s32, ay: s32, bx: s32, by: s32, color: Color)
+draw_segment :: (fb: Framebuffer, ax: s32, ay: s32, bx: s32, by: s32, color: Color)
 {
     steep := abs(ax-bx) < abs(ay-by);
     if steep {
@@ -61,8 +23,8 @@ draw_segment :: (fb: Framebuffer, camera: Camera, ax: s32, ay: s32, bx: s32, by:
     ierror := 0;
 
     for x: ax..bx {
-        if steep  put_pixel(fb, camera, y, x, color);
-        else      put_pixel(fb, camera, x, y, color);
+        if steep  put_pixel(fb, y, x, color);
+        else      put_pixel(fb, x, y, color);
 
         ierror += 2 * abs(by-ay);
         if ierror > (bx-ax) {
@@ -76,7 +38,7 @@ draw_projected_line :: (fb: Framebuffer, camera: Camera, line: Line, color: Colo
 {
     from := project_to_screen(camera, line.from);
     to := project_to_screen(camera, line.to);
-    draw_segment(fb, camera, xx from.x, xx from.y, xx to.x, xx to.y, color);
+    draw_segment(fb, xx from.x, xx from.y, xx to.x, xx to.y, color);
 }
 
 draw_projected_triangle :: (fb: Framebuffer, camera: Camera, triangle: Triangle, color: Color)
@@ -90,14 +52,7 @@ draw_projected_triangle :: (fb: Framebuffer, camera: Camera, triangle: Triangle,
     draw_projected_line(fb, camera, c_a, color);
 }
 
-#import "Math";
-
 #scope_export
-
-Camera :: struct {
-    position: Vector3;
-    fov: float;
-}
 
 Framebuffer :: struct {
     pixels: []u32;
@@ -120,20 +75,57 @@ framebuffer_drop :: (fb: *Framebuffer)
     fb.* = .{};
 }
 
-framebuffer_clear :: (fb: *Framebuffer, color: Color)
+framebuffer_clear :: (fb: Framebuffer, color: Color)
 {
     for * fb.pixels  it.* = xx color;
 }
 
-framebuffer_draw_model :: (fb: *Framebuffer, camera: Camera, model: Model, color: Color)
+framebuffer_draw_model :: (fb: Framebuffer, camera: Camera, model: Model, color: Color)
 {
     for model.faces {
-        face: Vector3 = it;
-        vertex_a := model.vertices[xx face.x];
-        vertex_b := model.vertices[xx face.y];
-        vertex_c := model.vertices[xx face.z];
+        face: Face = it;
+        vertex_a := model.vertices[face.a];
+        vertex_b := model.vertices[face.b];
+        vertex_c := model.vertices[face.c];
 
         triangle := Triangle.{ vertex_a, vertex_b, vertex_c };
         draw_projected_triangle(fb, camera, triangle, color);
     }
 }
+
+Software_Renderer_Data :: struct {
+    framebuffer: Framebuffer;
+    texture: *SDL_Texture;
+}
+
+software_renderer_make :: (sdl_renderer: *SDL_Renderer, width: s32, height: s32) -> Software_Renderer_Data, bool
+{
+    texture := SDL_CreateTexture(sdl_renderer, .ARGB8888, .STREAMING, width, height);
+    if !texture {
+        log_error("Couldn't create texture for software renderer: %", SDL_GetErrorString());
+        return .{}, false;
+    }
+
+    framebuffer := framebuffer_make(width, height);
+
+    data: Software_Renderer_Data;
+    data.framebuffer = framebuffer;
+    data.texture = texture;
+    return data, true;
+}
+
+software_renderer_drop :: (data: *Software_Renderer_Data)
+{
+    if data.texture  SDL_DestroyTexture(data.texture);
+    framebuffer_drop(*data.framebuffer);
+}
+
+software_renderer_draw :: (sdl_renderer: *SDL_Renderer, data: *Software_Renderer_Data)
+{
+    fb := data.framebuffer;
+    framebuffer_clear(fb, .BLACK);
+    SDL_UpdateTexture(data.texture, null, fb.pixels.data, fb.width * size_of(u32));
+    SDL_RenderTexture(sdl_renderer, data.texture, null, null);
+}
+
+#import "Math";

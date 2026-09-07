@@ -1,6 +1,10 @@
+Face :: struct {
+    a, b, c: s32;
+}
+
 Model :: struct {
     vertices: []Vector3;
-    faces:    []Vector3;
+    faces:    []Face;
 }
 
 model_load :: (path: string) -> Model, bool
@@ -12,7 +16,7 @@ model_load :: (path: string) -> Model, bool
     }
 
     verts: [..]Vector3;  verts.allocator = temp;
-    faces: [..]Vector3;  faces.allocator = temp;
+    faces: [..]Face;  faces.allocator = temp;
 
     for line: split(file, "\n",, temp) {
         s := line;
@@ -36,20 +40,21 @@ model_load :: (path: string) -> Model, bool
                 while s.count && s[0] == #char " "  advance(*s, 1);
             }
 
-            f := Vector3.{ xx idx[0], xx idx[1], xx idx[2] };
+            f := Face.{ idx[0], idx[1], idx[2] };
             array_add(*faces, f);
         }
     }
 
-    model: Model;
-    model.vertices = array_copy(verts);
-    model.faces = array_copy(faces);
-    return model, true;
+    m: Model;
+    m.vertices = array_copy(verts);
+    m.faces = array_copy(faces);
+    return m, true;
 }
 
-model_transform :: (model: Model, rotation: Vector3) -> []Vector3 {
-    out := NewArray(model.vertices.count, Vector3, initialized = false,, temp);
-    for model.vertices {
+model_transform :: (m: Model, rotation: Vector3) -> []Vector3
+{
+    out := NewArray(m.vertices.count, Vector3, initialized = false,, temp);
+    for m.vertices {
         rot: Quaternion;
         rot.xyz = rotation;
         out[it_index] = rotate(it, rot);
@@ -57,8 +62,14 @@ model_transform :: (model: Model, rotation: Vector3) -> []Vector3 {
     return out;
 }
 
+// @TODO: Use arenas for models, this should be used
+model_drop :: (m: *Model)
+{
+    array_free(m.faces);
+    array_free(m.vertices);
+}
+
 #import "Basic";
 #import "Math";
-#import "Flat_Pool";
 #import "File";
 #import "String";

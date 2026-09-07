@@ -1,36 +1,35 @@
-#import "Basic";
-#import "SDL3";
-
+#load "scene.jai";
+#load "model.jai";
 #load "render/renderer.jai";
+#load "render/software.jai";
+#load "render/gpu.jai";
 
 engine_logger :: (message: string, data: *void, info: Log_Info)
 {
     if !message  return;
 
-    prefix := "";
-    if info.common_flags & .ERROR then prefix = "ERRO: ";
-    else if info.common_flags & .WARNING then prefix = "WARN: ";
-    else prefix = "INFO: ";
+    prefix := ifx info.common_flags & .ERROR then "ERRO: "
+    else ifx info.common_flags & .WARNING then "WARN: "
+    else "INFO: ";
 
     newline := ifx message[message.count-1] == #char "\n" then "" else "\n";
     write_strings(prefix, message, newline, to_standard_error = (info.common_flags & .ERROR) != 0);
 }
 
-Game_State :: struct
+Engine_State :: struct
 {
     window: *SDL_Window;
     renderer: Renderer;
 }
 
-game_state: Game_State; /* static */
+state: Engine_State; /* static */
 
 // @TODO: Change these, make them modifiable and query during runtime.
 WINDOW_WIDTH :: 1920;
 WINDOW_HEIGHT :: 1080;
 
-app_init :: (app_state: **void, argc: s32, argv: **u8) -> SDL_AppResult
+app_init :: (_: **void, argc: s32, argv: **u8) -> SDL_AppResult
 {
-    app_state.* = *game_state;
     SDL_SetAppMetadata("cutengine", "v0.0.1", "com.engine.cutengine");
 
     ok := SDL_InitSubSystem(.VIDEO);
@@ -40,19 +39,19 @@ app_init :: (app_state: **void, argc: s32, argv: **u8) -> SDL_AppResult
     }
 
     window := SDL_CreateWindow("cutengine", WINDOW_WIDTH, WINDOW_HEIGHT, 0);
-    if !ok {
+    if !window {
         log_error("Couldn't create window: %", SDL_GetErrorString());
         return .FAILURE;
     }
 
-    game_state.window = window;
-    game_state.renderer, ok = renderer_make(window, .SOFTWARE, WINDOW_WIDTH, WINDOW_HEIGHT);
+    state.window = window;
+    state.renderer, ok = renderer_make(window, .SOFTWARE, WINDOW_WIDTH, WINDOW_HEIGHT);
     if !ok  return .FAILURE;
 
     return .CONTINUE;
 }
 
-app_event :: (app_state: *void, event: *SDL_Event) -> SDL_AppResult
+app_event :: (_: *void, event: *SDL_Event) -> SDL_AppResult
 {
     if event.type == {
     case .QUIT;
@@ -66,19 +65,15 @@ app_event :: (app_state: *void, event: *SDL_Event) -> SDL_AppResult
     return .CONTINUE;
 }
 
-app_iterate :: (app_state: *void) -> SDL_AppResult
+app_iterate :: (_: *void) -> SDL_AppResult
 {
-    state := cast(*Game_State) app_state;
-    rot := Vector3.{ 0, -1, 0 };
     renderer_draw(*state.renderer);
     reset_temporary_storage();
     return .CONTINUE;
 }
 
-app_quit :: (app_state: *void, result: SDL_AppResult)
+app_quit :: (_: *void, result: SDL_AppResult)
 {
-    state := cast(*Game_State) app_state;
-
     renderer_drop(*state.renderer);
     if state.window  SDL_DestroyWindow(state.window);
 
@@ -90,3 +85,6 @@ main :: ()
     context.logger = engine_logger;
     SDL_EnterAppMainCallbacks(app_init, app_iterate, app_event, app_quit);
 }
+
+#import "Basic";
+#import "SDL3";
