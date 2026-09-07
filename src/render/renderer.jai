@@ -1,4 +1,5 @@
 #load "software.jai";
+#load "model_loader.jai";
 
 #scope_file
 
@@ -14,6 +15,8 @@ Software_Renderer_Data :: struct {
 
 Gpu_Renderer_Data :: struct {}
 
+model: Model;
+
 #scope_export
 
 Renderer :: struct {
@@ -21,6 +24,8 @@ Renderer :: struct {
     renderer: *SDL_Renderer;
     width: s32;
     height: s32;
+
+    camera: Camera;
 
     using data: Backend_Data;
     Backend_Data :: union backend: Backend_Kind {
@@ -36,6 +41,12 @@ renderer_make :: (window: *SDL_Window, backend: Backend_Kind, width: s32, height
     ren.window = window;
     ren.width = width;
     ren.height = height;
+
+    ren.camera = Camera.{ position = .{ 0, -2, -30 } };
+    ren.camera.fov = 400;
+
+    // @FIXME: Remove
+    model = model_load("assets/teddybear.obj");
 
     ren.renderer = SDL_CreateRenderer(window, null);
     if !ren.renderer {
@@ -84,6 +95,7 @@ renderer_draw :: (using ren: *Renderer)
     case .SOFTWARE;
         fb := *software.framebuffer;
         framebuffer_clear(fb, .BLACK);
+        framebuffer_draw_model(fb, camera, model, .GREEN);
         SDL_UpdateTexture(software.texture, null, fb.pixels.data, fb.width * size_of(u32));
         SDL_RenderTexture(renderer, software.texture, null, null);
     case .GPU;

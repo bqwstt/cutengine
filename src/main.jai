@@ -24,6 +24,10 @@ Game_State :: struct
 
 game_state: Game_State; /* static */
 
+// @TODO: Change these, make them modifiable and query during runtime.
+WINDOW_WIDTH :: 1920;
+WINDOW_HEIGHT :: 1080;
+
 app_init :: (app_state: **void, argc: s32, argv: **u8) -> SDL_AppResult
 {
     app_state.* = *game_state;
@@ -35,14 +39,14 @@ app_init :: (app_state: **void, argc: s32, argv: **u8) -> SDL_AppResult
         return .FAILURE;
     }
 
-    window := SDL_CreateWindow("cutengine", 1920, 1080, 0);
+    window := SDL_CreateWindow("cutengine", WINDOW_WIDTH, WINDOW_HEIGHT, 0);
     if !ok {
         log_error("Couldn't create window: %", SDL_GetErrorString());
         return .FAILURE;
     }
 
     game_state.window = window;
-    game_state.renderer, ok = renderer_make(window, .SOFTWARE, 1920, 1080);
+    game_state.renderer, ok = renderer_make(window, .SOFTWARE, WINDOW_WIDTH, WINDOW_HEIGHT);
     if !ok  return .FAILURE;
 
     return .CONTINUE;
@@ -65,6 +69,7 @@ app_event :: (app_state: *void, event: *SDL_Event) -> SDL_AppResult
 app_iterate :: (app_state: *void) -> SDL_AppResult
 {
     state := cast(*Game_State) app_state;
+    rot := Vector3.{ 0, -1, 0 };
     renderer_draw(*state.renderer);
     reset_temporary_storage();
     return .CONTINUE;
