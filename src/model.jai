@@ -21,21 +21,23 @@ model_load :: (path: string) -> Model, bool
     for line: split(file, "\n",, temp) {
         s := line;
         if starts_with(s, "v ") {
-            // Vertices
+            // Parse vertex (v v1 v2 v3)
             advance(*s, 2);
             x := parse_float(*s);
             y := parse_float(*s);
             z := parse_float(*s);
 
-            v := Vector3.{ x, -y, -z };
+            v := Vector3.{ x, -y, -z }; // In OBJ, positive y/z is our negative y/z, so negate it
             array_add(*verts, v);
         } else if starts_with(s, "f ") {
-            // Faces
+            // Parse face (f v1[vt1][vn2] v2[vt2][vn2] v3[vt3][vn3])
             advance(*s, 2);
             idx: [3]s32;
             for 0..2 {
                 v := parse_int(*s, s32);
                 idx[it] = v - 1;
+
+                // Skip vt and vn for now
                 while s.count && s[0] != #char " "  advance(*s, 1);
                 while s.count && s[0] == #char " "  advance(*s, 1);
             }
@@ -53,6 +55,8 @@ model_load :: (path: string) -> Model, bool
 
 model_transform :: (m: Model, rotation: Vector3) -> []Vector3
 {
+    // Rotate all vertices in the desired axis
+    // @FIXME: This quaternion thing is not correct, use rotate_x etc. funcs.
     out := NewArray(m.vertices.count, Vector3, initialized = false,, temp);
     for m.vertices {
         rot: Quaternion;

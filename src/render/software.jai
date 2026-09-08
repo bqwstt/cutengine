@@ -6,14 +6,32 @@ put_pixel :: (fb: Framebuffer, x: s32, y: s32, color: Color)
     fb.pixels[(fb.width * y) + x] = xx color;
 }
 
+/// References:
+/// * https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
+/// * https://haqr.eu/tinyrenderer/bresenham/
 draw_segment :: (fb: Framebuffer, ax: s32, ay: s32, bx: s32, by: s32, color: Color)
 {
+    // If the line is too steep, and given that we increment by x later, we want
+    // to preserve the smooth filling, we can swap x and y together to not lose
+    // pixels on the way
+    //
+    //     * │          * │      Notice the extra space when on the x-axis,
+    //       │y        *  │x     these get eliminated once we iterate over y.
+    //    *  │'        *  │'     Think of rotating the screen when filling.
+    //       │a       *   │a
+    //   *   │x ───>  *   │x
+    //       │i      *    │i
+    //  *    │s      *    │s
+    //  ─────┘       ─────┘
+    //  x-axis       y-axis
     steep := abs(ax-bx) < abs(ay-by);
     if steep {
         swap(*ax, *ay);
         swap(*bx, *by);
     }
 
+    // Our loop goes from x0-->x1, which assumes we're going from left to right.
+    // In case that we're starting from the right, we have to swap these points.
     if ax > bx {
         swap(*ax, *bx);
         swap(*ay, *by);
@@ -23,6 +41,7 @@ draw_segment :: (fb: Framebuffer, ax: s32, ay: s32, bx: s32, by: s32, color: Col
     ierror := 0;
 
     for x: ax..bx {
+        // If transposed, de-transpose
         if steep  put_pixel(fb, y, x, color);
         else      put_pixel(fb, x, y, color);
 
