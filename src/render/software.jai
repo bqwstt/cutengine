@@ -1,11 +1,13 @@
 #scope_file
 
+/// Color pixel at (x, y)
 put_pixel :: (fb: Framebuffer, x: s32, y: s32, color: Color)
 {
     if x < 0 || x >= fb.width || y < 0 || y >= fb.height  return; 
     fb.pixels[(fb.width * y) + x] = xx color;
 }
 
+/// Draw a line between two points (ax, ay) and (bx, by)
 /// References:
 /// * https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
 /// * https://haqr.eu/tinyrenderer/bresenham/
@@ -53,6 +55,7 @@ draw_segment :: (fb: Framebuffer, ax: s32, ay: s32, bx: s32, by: s32, color: Col
     }
 }
 
+/// Draw 2D line into 3D space
 draw_projected_line :: (fb: Framebuffer, camera: Camera, line: Line, color: Color)
 {
     from := project_to_screen(camera, line.from);
@@ -60,6 +63,7 @@ draw_projected_line :: (fb: Framebuffer, camera: Camera, line: Line, color: Colo
     draw_segment(fb, xx from.x, xx from.y, xx to.x, xx to.y, color);
 }
 
+/// Draw a projected 3D triangle
 draw_projected_triangle :: (fb: Framebuffer, camera: Camera, triangle: Triangle, color: Color)
 {
     a_b := Line.{ triangle.points[0], triangle.points[1] };
@@ -115,10 +119,22 @@ framebuffer_draw_model :: (fb: Framebuffer, camera: Camera, model: Model, color:
 Software_Renderer_Data :: struct {
     framebuffer: Framebuffer;
     texture: *SDL_Texture;
+    sdl_renderer: *SDL_Renderer;
 }
 
-software_renderer_make :: (sdl_renderer: *SDL_Renderer, width: s32, height: s32) -> Software_Renderer_Data, bool
+software_renderer_make :: (window: *SDL_Window, width: s32, height: s32) -> Software_Renderer_Data, bool
 {
+    sdl_renderer := SDL_CreateRenderer(window, null);
+    if !sdl_renderer {
+        log_error("Couldn't create SDL renderer: %", SDL_GetErrorString());
+        return .{}, false;
+    }
+
+    if !SDL_SetRenderVSync(sdl_renderer, 1) {
+        log_error("Couldn't set renderer VSync: %", SDL_GetErrorString());
+        return .{}, false;
+    }
+
     texture := SDL_CreateTexture(sdl_renderer, .ARGB8888, .STREAMING, width, height);
     if !texture {
         log_error("Couldn't create texture for software renderer: %", SDL_GetErrorString());
@@ -130,21 +146,24 @@ software_renderer_make :: (sdl_renderer: *SDL_Renderer, width: s32, height: s32)
     data: Software_Renderer_Data;
     data.framebuffer = framebuffer;
     data.texture = texture;
+    data.sdl_renderer = sdl_renderer;
     return data, true;
 }
 
 software_renderer_drop :: (data: *Software_Renderer_Data)
 {
     if data.texture  SDL_DestroyTexture(data.texture);
+    if data.sdl_renderer  SDL_DestroyRenderer(data.sdl_renderer);
     framebuffer_drop(*data.framebuffer);
 }
 
-software_renderer_draw :: (sdl_renderer: *SDL_Renderer, data: *Software_Renderer_Data)
+software_renderer_draw :: (data: *Software_Renderer_Data)
 {
     fb := data.framebuffer;
     framebuffer_clear(fb, .BLACK);
     SDL_UpdateTexture(data.texture, null, fb.pixels.data, fb.width * size_of(u32));
-    SDL_RenderTexture(sdl_renderer, data.texture, null, null);
+    SDL_RenderTexture(data.sdl_renderer, data.texture, null, null);
+    SDL_RenderPresent(data.sdl_renderer);
 }
 
 #import "Math";

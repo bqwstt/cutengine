@@ -7,7 +7,6 @@ Backend_Kind :: enum u32 {
 
 Renderer :: struct {
     window: *SDL_Window;
-    sdl_renderer: *SDL_Renderer;
     width: s32;
     height: s32;
 
@@ -26,25 +25,17 @@ renderer_make :: (window: *SDL_Window, backend: Backend_Kind, width: s32, height
     ren.width = width;
     ren.height = height;
 
-    ren.sdl_renderer = SDL_CreateRenderer(window, null);
-    if !ren.sdl_renderer {
-        log_error("Couldn't create SDL renderer: %", SDL_GetErrorString());
-        return .{}, false;
-    }
-
-    ok := SDL_SetRenderVSync(ren.sdl_renderer, 1);
-    if !ok {
-        log_error("Couldn't set renderer VSync: %", SDL_GetErrorString());
-        return .{}, false;
-    }
-
     if #complete backend == {
     case .SOFTWARE;
-        data, ok := software_renderer_make(ren.sdl_renderer, width, height);
+        data, ok := software_renderer_make(window, width, height);
         if !ok  return .{}, false;
+
         ren.software_data = data;
     case .GPU;
-        /* gpu data creation */
+        data, ok := gpu_renderer_make(window);
+        if !ok  return .{}, false;
+
+        ren.gpu_data = data;
     }
 
     return ren, true;
@@ -56,10 +47,9 @@ renderer_drop :: (using ren: *Renderer)
     case .SOFTWARE;
         software_renderer_drop(*software_data);
     case .GPU;
-        /* gpu data drop */
+        gpu_renderer_drop(window, *gpu_data);
     }
 
-    if sdl_renderer  SDL_DestroyRenderer(sdl_renderer);
     ren.* = .{};
 }
 
@@ -67,12 +57,10 @@ renderer_draw :: (using ren: *Renderer)
 {
     if #complete backend == {
     case .SOFTWARE;
-        software_renderer_draw(sdl_renderer, *software_data);
+        software_renderer_draw(*software_data);
     case .GPU;
-        gpu_renderer_draw(sdl_renderer);
+        gpu_renderer_draw(window, *gpu_data);
     }
-
-    SDL_RenderPresent(sdl_renderer);
 }
 
 #import "Basic";

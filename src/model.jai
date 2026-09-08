@@ -7,6 +7,8 @@ Model :: struct {
     faces:    []Face;
 }
 
+/// Load an .obj model from a filepath. Currently reads vertices (`v` components) and faces (`f` components).
+/// There is no support for vertex normals or materials.
 model_load :: (path: string) -> Model, bool
 {
     file, ok := read_entire_file(path,, temp);
@@ -53,9 +55,9 @@ model_load :: (path: string) -> Model, bool
     return m, true;
 }
 
+/// Rotate all vertices of the model in the desired axis
 model_transform :: (m: Model, rotation: Vector3) -> []Vector3
 {
-    // Rotate all vertices in the desired axis
     // @FIXME: This quaternion thing is not correct, use rotate_x etc. funcs.
     out := NewArray(m.vertices.count, Vector3, initialized = false,, temp);
     for m.vertices {
@@ -66,7 +68,7 @@ model_transform :: (m: Model, rotation: Vector3) -> []Vector3
     return out;
 }
 
-// @TODO: Use arenas for models, this should be used
+// @TODO: Use arenas for models, this should not be used
 model_drop :: (m: *Model)
 {
     array_free(m.faces);

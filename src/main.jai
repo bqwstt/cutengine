@@ -45,9 +45,10 @@ app_init :: (_: **void, argc: s32, argv: **u8) -> SDL_AppResult
     }
 
     state.window = window;
-    state.renderer, ok = renderer_make(window, .SOFTWARE, WINDOW_WIDTH, WINDOW_HEIGHT);
+    state.renderer, ok = renderer_make(window, .GPU, WINDOW_WIDTH, WINDOW_HEIGHT);
     if !ok  return .FAILURE;
 
+    log("Initialized SDL using GPU acceleration");
     return .CONTINUE;
 }
 

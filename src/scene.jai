@@ -24,6 +24,7 @@ Triangle :: struct {
     #overlay (a) points: [3]Vector3;
 }
 
+/// Project a 3D point to a 2D plane
 project :: (camera: Camera, point: Vector3) -> Vector2 {
     v: Vector2;
     v.x = camera.fov * point.x / point.z;
@@ -31,6 +32,7 @@ project :: (camera: Camera, point: Vector3) -> Vector2 {
     return v;
 }
 
+/// Project a 3D point to a 2D plane relative to the camera
 project_to_screen :: (camera: Camera, point: Vector3) -> Vector2 {
     v := project(camera, point - camera.position);
     v.x += WINDOW_WIDTH / 2.0;
