@@ -98,12 +98,14 @@ gpu_renderer_draw :: (window: *SDL_Window, data: *Gpu_Renderer_Data)
 
 Vertex :: struct {
     position: Vector3;
+    color: Vector4;
 }
 
 VERTICES :: Vertex.[
-    Vertex.{ Vector3.{ -1.0, -1.0, 0.0 } }, // Bottom-left
-    Vertex.{ Vector3.{  1.0, -1.0, 0.0 } }, // Bottom-Right
-    Vertex.{ Vector3.{  0.0,  1.0, 0.0 } }  // Top-middle
+    //       Position (NDC)               Color (NDC)
+    Vertex.{ Vector3.{ -1.0, -1.0, 0.0 }, Vector4.{ 1.0, 0.0, 0.0, 1.0 } }, // Bottom-left
+    Vertex.{ Vector3.{  1.0, -1.0, 0.0 }, Vector4.{ 0.0, 1.0, 0.0, 1.0 } }, // Bottom-Right
+    Vertex.{ Vector3.{  0.0,  1.0, 0.0 }, Vector4.{ 0.0, 0.0, 1.0, 1.0 } }  // Top-middle
 ];
 
 load_shader :: (device: *SDL_GPUDevice, path: string) -> *SDL_GPUShader
@@ -191,7 +193,8 @@ create_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice) -> *SDL_GPUGrap
 
     // How is the thing I am going to send look like?
     VERTEX_ATTRIBUTES :: SDL_GPUVertexAttribute.[
-        .{ location = 0, buffer_slot = 0, format = .FLOAT3, offset = #run offset_of(Vertex, "position") },
+        .{ location = 0, buffer_slot = 0, format = .FLOAT3, offset = #run offset_of(Vertex, "position") }, // Position attribute
+        .{ location = 1, buffer_slot = 0, format = .FLOAT4, offset = #run offset_of(Vertex, "color") }, // Color attribute
     ];
 
     COLOR_TARGET_DESCRIPTION := SDL_GPUColorTargetDescription.[
@@ -258,9 +261,9 @@ create_vertex_buffer :: (device: *SDL_GPUDevice, vertices: []Vertex) -> *SDL_GPU
         log_error("Couldn't map transfer buffer: %", SDL_GetErrorString());
         return null;
     }
-    defer SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
 
     memcpy(transfer_data, vertices.data, vertices_size);
+    SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
 
     upload_cmd_buf := SDL_AcquireGPUCommandBuffer(device);
     if !upload_cmd_buf {
