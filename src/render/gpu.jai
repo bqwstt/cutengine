@@ -10,6 +10,7 @@ Gpu_Renderer_Data :: struct {
 
 gpu_renderer_make :: (window: *SDL_Window) -> Gpu_Renderer_Data, bool
 {
+    // Create device, pipeline and vertex buffer
     format_flags: SDL_GPUShaderFormat = SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL | SDL_GPU_SHADERFORMAT_MSL;
     device := SDL_CreateGPUDevice(format_flags, DEBUG, null);
     if !device {
@@ -27,8 +28,6 @@ gpu_renderer_make :: (window: *SDL_Window) -> Gpu_Renderer_Data, bool
         log_error("Couldn't create graphics pipeline: %", SDL_GetErrorString());
         return .{}, false;
     }
-
-    // Create vertices
 
     vertex_buffer := create_vertex_buffer(device, VERTICES);
     if !vertex_buffer {
@@ -72,7 +71,7 @@ gpu_renderer_draw :: (window: *SDL_Window, data: *Gpu_Renderer_Data)
         cti.load_op = .CLEAR;
         cti.store_op = .STORE;
 
-        // Empty render pass for now
+        // Render pass: bind pipeline, vertex buffers and draw primitives
         render_pass := SDL_BeginGPURenderPass(cmd, *cti, 1, null);
 
         VERTEX_BUFFERS := SDL_GPUBufferBinding.[
@@ -124,15 +123,19 @@ load_shader :: (device: *SDL_GPUDevice, path: string) -> *SDL_GPUShader
     format: SDL_GPUShaderFormat = SDL_GPU_SHADERFORMAT_INVALID;
     backend_formats := SDL_GetGPUShaderFormats(device);
 
+    // Grab path + entrypoint depending on target API
     if backend_formats & SDL_GPU_SHADERFORMAT_SPIRV {
+        // Vulkan
         full_path = path_join(full_path, tprint("%.%", path, "spv"),, temp);
         format = SDL_GPU_SHADERFORMAT_SPIRV;
         entrypoint = "main";
     } else if backend_formats & SDL_GPU_SHADERFORMAT_MSL {
+        // Metal
         full_path = path_join(full_path, tprint("%.%", path, "msl"),, temp);
         format = SDL_GPU_SHADERFORMAT_MSL;
         entrypoint = "main0";
     } else if backend_formats & SDL_GPU_SHADERFORMAT_DXIL {
+        // DirectX
         full_path = path_join(full_path, tprint("%.%", path, "dxil"),, temp);
         format = SDL_GPU_SHADERFORMAT_DXIL;
         entrypoint = "main";
@@ -166,6 +169,7 @@ load_shader :: (device: *SDL_GPUDevice, path: string) -> *SDL_GPUShader
 
 create_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice) -> *SDL_GPUGraphicsPipeline
 {
+    // Load vertex and fragment shaders
     vertex_shader := load_shader(device, "position.vert");
     if !vertex_shader {
         log_error("Couldn't create vertex shader");
@@ -180,10 +184,12 @@ create_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice) -> *SDL_GPUGrap
     }
     defer SDL_ReleaseGPUShader(device, fragment_shader);
 
+    // What am I going to send?
     VERTEX_BUFFER_DESCRIPTIONS :: SDL_GPUVertexBufferDescription.[
         .{ slot = 0, pitch = size_of(Vertex), input_rate = .VERTEX, instance_step_rate = 0 }
     ];
 
+    // How is the thing I am going to send look like?
     VERTEX_ATTRIBUTES :: SDL_GPUVertexAttribute.[
         .{ location = 0, buffer_slot = 0, format = .FLOAT3, offset = #run offset_of(Vertex, "position") },
     ];
@@ -192,6 +198,10 @@ create_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice) -> *SDL_GPUGrap
         .{ format = SDL_GetGPUSwapchainTextureFormat(device, window) }
     ];
 
+    // Create pipeline info:
+    // - specify vertex and fragment shaders
+    // - specify vertex descriptions and vertex attributes
+    // - specify primitive type and fill mode
     pci := SDL_GPUGraphicsPipelineCreateInfo.{
         vertex_shader = vertex_shader,
         fragment_shader = fragment_shader,
@@ -216,6 +226,7 @@ create_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice) -> *SDL_GPUGrap
 
 create_vertex_buffer :: (device: *SDL_GPUDevice, vertices: []Vertex) -> *SDL_GPUBuffer
 {
+    // Hold vertex information
     vertices_size := vertices.count * size_of(Vertex);
     vbci := SDL_GPUBufferCreateInfo.{
         usage = SDL_GPU_BUFFERUSAGE_VERTEX,
@@ -228,6 +239,7 @@ create_vertex_buffer :: (device: *SDL_GPUDevice, vertices: []Vertex) -> *SDL_GPU
         return null;
     }
 
+    // Create transfer buffer to move vertices between CPU -> GPU
     tbci := SDL_GPUTransferBufferCreateInfo.{
         usage = .UPLOAD,
         size = xx vertices_size
@@ -240,6 +252,7 @@ create_vertex_buffer :: (device: *SDL_GPUDevice, vertices: []Vertex) -> *SDL_GPU
     }
     defer SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
 
+    // Map transfer buffer and copy vertex data into it
     transfer_data: *Vertex = SDL_MapGPUTransferBuffer(device, transfer_buffer, false);
     if !transfer_data {
         log_error("Couldn't map transfer buffer: %", SDL_GetErrorString());
@@ -255,19 +268,23 @@ create_vertex_buffer :: (device: *SDL_GPUDevice, vertices: []Vertex) -> *SDL_GPU
         return null;
     }
 
+    // Copy pass: use command buffer to send the data via the transfer buffer
     copy_pass := SDL_BeginGPUCopyPass(upload_cmd_buf);
 
+    // (From)
     buffer_location := SDL_GPUTransferBufferLocation.{
         transfer_buffer = transfer_buffer, 
         offset = 0
     };
 
+    // (To)
     buffer_region := SDL_GPUBufferRegion.{
         buffer = vertex_buffer,
         offset = 0,
         size = xx vertices_size,
     };
 
+    // Perform the copy and submit the command to the command buffer
     SDL_UploadToGPUBuffer(copy_pass, *buffer_location, *buffer_region, false);
     SDL_EndGPUCopyPass(copy_pass);
 
@@ -279,7 +296,14 @@ create_vertex_buffer :: (device: *SDL_GPUDevice, vertices: []Vertex) -> *SDL_GPU
     return vertex_buffer;
 }
 
-offset_of :: ($T: Type, $member: string) -> int {
+/// Helper for grabbing the offsite of a member in a struct
+offset_of :: ($T: Type, $member: string) -> int
+#modify {
+    ti := cast(*Type_Info) T;
+    if ti.type != .STRUCT return false;
+
+    return true;
+} {
     for type_info(T).members {
         if it.name == member  return it.offset_in_bytes;
     }

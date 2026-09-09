@@ -105,6 +105,7 @@ framebuffer_clear :: (fb: Framebuffer, color: Color)
 
 framebuffer_draw_model :: (fb: Framebuffer, camera: Camera, model: Model, color: Color)
 {
+    // Draw all projected vertices in the form of triangles
     for model.faces {
         face: Face = it;
         vertex_a := model.vertices[face.a];
@@ -124,6 +125,7 @@ Software_Renderer_Data :: struct {
 
 software_renderer_make :: (window: *SDL_Window, width: s32, height: s32) -> Software_Renderer_Data, bool
 {
+    // Create internal SDL renderer and texture to draw to
     sdl_renderer := SDL_CreateRenderer(window, null);
     if !sdl_renderer {
         log_error("Couldn't create SDL renderer: %", SDL_GetErrorString());
@@ -159,6 +161,7 @@ software_renderer_drop :: (data: *Software_Renderer_Data)
 
 software_renderer_draw :: (data: *Software_Renderer_Data)
 {
+    // Clear framebuffer and update the texture with the new data, then present it.
     fb := data.framebuffer;
     framebuffer_clear(fb, .BLACK);
     SDL_UpdateTexture(data.texture, null, fb.pixels.data, fb.width * size_of(u32));
