@@ -38,7 +38,9 @@ app_init :: (_: **void, argc: s32, argv: **u8) -> SDL_AppResult
         return .FAILURE;
     }
 
-    window := SDL_CreateWindow("cutengine", WINDOW_WIDTH, WINDOW_HEIGHT, 0);
+    // Use high pixel density, otherwise we have blurry edges on MacOS
+    window_flags: SDL_WindowFlags = .HIGH_PIXEL_DENSITY | .RESIZABLE;
+    window := SDL_CreateWindow("cutengine", WINDOW_WIDTH, WINDOW_HEIGHT, window_flags);
     if !window {
         log_error("Couldn't create window: %", SDL_GetErrorString());
         return .FAILURE;
