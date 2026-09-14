@@ -19,10 +19,8 @@ gpu_renderer_make :: (window: *SDL_Window) -> Gpu_Renderer_Data, bool
         return .{}, false;
     }
 
-    if !SDL_ClaimWindowForGPUDevice(device, window) {
-        log_error("Couldn't claim window for GPU device: %", SDL_GetErrorString());
-        return .{}, false;
-    }
+    device_window_ok := SDL_ClaimWindowForGPUDevice(device, window);
+    assert(device_window_ok, "Couldn't claim window for GPU device: %", SDL_GetErrorString());
 
     pipeline := create_pipeline(window, device);
     if !pipeline {
@@ -39,10 +37,7 @@ gpu_renderer_make :: (window: *SDL_Window) -> Gpu_Renderer_Data, bool
         address_mode_w = .CLAMP_TO_EDGE,
     };
     sampler := SDL_CreateGPUSampler(device, *sampler_create_info);
-    if !sampler {
-        log_error("Couldn't create sampler: %", SDL_GetErrorString());
-        return .{}, false;
-    }
+    assert(sampler != null, "Couldn't create sampler: %", SDL_GetErrorString());
 
     mesh, ok := create_buffers(device, VERTICES, INDICES);
     if !ok {
@@ -71,18 +66,14 @@ gpu_renderer_draw :: (window: *SDL_Window, data: *Gpu_Renderer_Data)
 {
     // Create command buffer for batching requests to the GPU
     cmd := SDL_AcquireGPUCommandBuffer(data.device);
-    if !cmd {
-        log_error("Couldn't acquire GPU command buffer: %", SDL_GetErrorString());
-        return;
-    }
+    assert(cmd != null, "Couldn't acquire GPU command buffer: %", SDL_GetErrorString());
 
     // Create a swapchain texture to draw in between frames
     swapchain_texture: *SDL_GPUTexture;
-    if !SDL_WaitAndAcquireGPUSwapchainTexture(cmd, window, *swapchain_texture, null, null) {
-        log_error("Couldn't acquire swapchain texture: %", SDL_GetErrorString());
-        return;
-    }
+    ok := SDL_WaitAndAcquireGPUSwapchainTexture(cmd, window, *swapchain_texture, null, null); 
+    assert(ok, "Couldn't acquire swapchain texture: %", SDL_GetErrorString());
 
+    // Check needed: the swapchain texture can be null in certain cases, i.e. the window is minimized.
     if swapchain_texture {
         cti: SDL_GPUColorTargetInfo;
         cti.texture = swapchain_texture;
@@ -113,10 +104,8 @@ gpu_renderer_draw :: (window: *SDL_Window, data: *Gpu_Renderer_Data)
     }
 
     // Send commands to the GPU
-    if !SDL_SubmitGPUCommandBuffer(cmd) {
-        log_error("Couldn't submit command buffer to GPU: %", SDL_GetErrorString());
-        return;
-    }
+    ok = SDL_SubmitGPUCommandBuffer(cmd);
+    assert(ok, "Couldn't submit command buffer to GPU: %", SDL_GetErrorString());
 }
 
 // #region Shaders
@@ -140,6 +129,17 @@ VERTICES :: Vertex.[
     Vertex.{ position = .{  0.5, -0.5, 0.0 }, texture = .{ 1, 1 } }, // Bottom-right
     Vertex.{ position = .{ -0.5,  0.5, 0.0 }, texture = .{ 0, 0 } }, // Top-left
     Vertex.{ position = .{  0.5,  0.5, 0.0 }, texture = .{ 1, 0 } }  // Top-right
+];
+
+// What am I going to send?
+VERTEX_BUFFER_DESCRIPTIONS :: SDL_GPUVertexBufferDescription.[
+    .{ slot = 0, pitch = size_of(Vertex), input_rate = .VERTEX, instance_step_rate = 0 }
+];
+
+// How is the thing I am going to send look like?
+VERTEX_ATTRIBUTES :: SDL_GPUVertexAttribute.[
+    .{ location = 0, buffer_slot = 0, format = .FLOAT3, offset = #run offset_of(Vertex, "position") }, // Position attribute
+    .{ location = 1, buffer_slot = 0, format = .FLOAT2, offset = #run offset_of(Vertex, "texture") },  // Texture attribute
 ];
 
 INDICES :: u32.[
@@ -215,31 +215,14 @@ create_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice) -> *SDL_GPUGrap
 {
     // Load vertex and fragment shaders
     vertex_shader := load_shader(device, "position.vert");
-    if !vertex_shader {
-        log_error("Couldn't create vertex shader: %", SDL_GetErrorString());
-        return null;
-    }
+    assert(vertex_shader != null, "Couldn't create vertex shader: %", SDL_GetErrorString());
     defer SDL_ReleaseGPUShader(device, vertex_shader);
 
     fragment_shader := load_shader(device, "texture.frag", 1);
-    if !fragment_shader {
-        log_error("Couldn't create fragment shader: %", SDL_GetErrorString());
-        return null;
-    }
+    assert(fragment_shader != null, "Couldn't create fragment shader: %", SDL_GetErrorString());
     defer SDL_ReleaseGPUShader(device, fragment_shader);
 
-    // What am I going to send?
-    VERTEX_BUFFER_DESCRIPTIONS :: SDL_GPUVertexBufferDescription.[
-        .{ slot = 0, pitch = size_of(Vertex), input_rate = .VERTEX, instance_step_rate = 0 }
-    ];
-
-    // How is the thing I am going to send look like?
-    VERTEX_ATTRIBUTES :: SDL_GPUVertexAttribute.[
-        .{ location = 0, buffer_slot = 0, format = .FLOAT3, offset = #run offset_of(Vertex, "position") }, // Position attribute
-        .{ location = 1, buffer_slot = 0, format = .FLOAT2, offset = #run offset_of(Vertex, "texture") }, // Color attribute
-    ];
-
-    COLOR_TARGET_DESCRIPTION := SDL_GPUColorTargetDescription.[
+    color_target_description := SDL_GPUColorTargetDescription.[
         .{ format = SDL_GetGPUSwapchainTextureFormat(device, window) }
     ];
 
@@ -261,8 +244,8 @@ create_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice) -> *SDL_GPUGrap
             fill_mode = .FILL,
         },
         target_info = SDL_GPUGraphicsPipelineTargetInfo.{
-            color_target_descriptions = COLOR_TARGET_DESCRIPTION.data,
-            num_color_targets = COLOR_TARGET_DESCRIPTION.count
+            color_target_descriptions = color_target_description.data,
+            num_color_targets = color_target_description.count
         }
     };
 
@@ -278,10 +261,7 @@ create_buffers :: (device: *SDL_GPUDevice, vertices: []Vertex, indices: []u32) -
     };
 
     vertex_buffer := SDL_CreateGPUBuffer(device, *vertex_buffer_info);
-    if !vertex_buffer {
-        log_error("Couldn't create vertex buffer: %", SDL_GetErrorString());
-        return .{}, false;
-    }
+    assert(vertex_buffer != null, "Couldn't create vertex buffer: %", SDL_GetErrorString());
 
     // Create index buffer
     index_buffer_info := SDL_GPUBufferCreateInfo.{
@@ -290,10 +270,7 @@ create_buffers :: (device: *SDL_GPUDevice, vertices: []Vertex, indices: []u32) -
     };
 
     index_buffer := SDL_CreateGPUBuffer(device, *index_buffer_info);
-    if !index_buffer {
-        log_error("Couldn't create index buffer: %", SDL_GetErrorString());
-        return .{}, false;
-    }
+    assert(index_buffer != null, "Couldn't create index buffer: %", SDL_GetErrorString());
 
     // Transfer vertices between CPU -> GPU
     vertices_size := cast(u32) vertices.count * size_of(Vertex);
@@ -306,18 +283,12 @@ create_buffers :: (device: *SDL_GPUDevice, vertices: []Vertex, indices: []u32) -
     };
 
     transfer_buffer := SDL_CreateGPUTransferBuffer(device, *transfer_buffer_info);
-    if !transfer_buffer {
-        log_error("Couldn't create transfer buffer: %", SDL_GetErrorString());
-        return .{}, false;
-    }
+    assert(transfer_buffer != null, "Couldn't create transfer buffer: %", SDL_GetErrorString());
     defer SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
 
     // Map transfer buffer and copy vertex + index data into it
     transfer_data: *u8 = SDL_MapGPUTransferBuffer(device, transfer_buffer, false);
-    if !transfer_data {
-        log_error("Couldn't map transfer buffer: %", SDL_GetErrorString());
-        return .{}, false;
-    }
+    assert(transfer_data != null, "Couldn't map transfer data: %", SDL_GetErrorString());
 
     // Copy vertices and indices
     memcpy(transfer_data, vertices.data, vertices_size);
@@ -328,7 +299,7 @@ create_buffers :: (device: *SDL_GPUDevice, vertices: []Vertex, indices: []u32) -
     // Create texture
     texture_image := load_image("awesomeface.png");
     if !texture_image {
-        log_error("Couldn't load BMP: %", SDL_GetErrorString());
+        log_error("Couldn't load texture image: %", SDL_GetErrorString());
         return .{}, false;
     }
     defer SDL_DestroySurface(texture_image);
@@ -346,6 +317,7 @@ create_buffers :: (device: *SDL_GPUDevice, vertices: []Vertex, indices: []u32) -
         num_levels = 1,
     };
     texture := SDL_CreateGPUTexture(device, *texture_create_info);
+    assert(texture != null, "Couldn't create texture: %", SDL_GetErrorString());
     SDL_SetGPUTextureName(device, texture, "awesomeface");
 
     texture_transfer_buffer_info := SDL_GPUTransferBufferCreateInfo.{
@@ -353,18 +325,12 @@ create_buffers :: (device: *SDL_GPUDevice, vertices: []Vertex, indices: []u32) -
         size = tex_w * tex_h * 4
     };
     texture_transfer_buffer := SDL_CreateGPUTransferBuffer(device, *texture_transfer_buffer_info);
-    if !texture_transfer_buffer {
-        log_error("Couldn't create texture transfer buffer: %", SDL_GetErrorString());
-        return .{}, false;
-    }
+    assert(texture_transfer_buffer != null, "Couldn't create texture transfer buffer: %", SDL_GetErrorString());
     defer SDL_ReleaseGPUTransferBuffer(device, texture_transfer_buffer);
 
     // Map texture transfer buffer and texture into it
     texture_transfer_data: *u8 = SDL_MapGPUTransferBuffer(device, texture_transfer_buffer, false);
-    if !texture_transfer_data {
-        log_error("Couldn't map transfer buffer: %", SDL_GetErrorString());
-        return .{}, false;
-    }
+    assert(texture_transfer_data != null, "Couldn't map texture transfer buffer: %", SDL_GetErrorString());
 
     // Copy texture
     memcpy(texture_transfer_data, texture_image.pixels, tex_w * tex_h * 4);
@@ -372,10 +338,7 @@ create_buffers :: (device: *SDL_GPUDevice, vertices: []Vertex, indices: []u32) -
     SDL_UnmapGPUTransferBuffer(device, texture_transfer_buffer);
 
     upload_cmd_buf := SDL_AcquireGPUCommandBuffer(device);
-    if !upload_cmd_buf {
-        log_error("Couldn't acquire GPU command buffer: %", SDL_GetErrorString());
-        return .{}, false;
-    }
+    assert(upload_cmd_buf != null, "Couldn't acquire GPU command buffer: %", SDL_GetErrorString());
 
     // Copy pass: use command buffer to send the data via the transfer buffer
     copy_pass := SDL_BeginGPUCopyPass(upload_cmd_buf);
@@ -425,10 +388,8 @@ create_buffers :: (device: *SDL_GPUDevice, vertices: []Vertex, indices: []u32) -
 
     SDL_EndGPUCopyPass(copy_pass);
 
-    if !SDL_SubmitGPUCommandBuffer(upload_cmd_buf) {
-        log_error("Coulnd't submit GPU command buffer: %", SDL_GetErrorString());
-        return .{}, false;
-    }
+    ok := SDL_SubmitGPUCommandBuffer(upload_cmd_buf); 
+    assert(ok, "Couldn't submit GPU command buffer: %", SDL_GetErrorString());
 
     return Mesh.{ vertex_buffer, index_buffer, texture }, true;
 }
@@ -441,7 +402,7 @@ mesh_drop :: (device: *SDL_GPUDevice, m: *Mesh)
 }
 
 /// Helper for grabbing the offsite of a member in a struct
-offset_of :: ($T: Type, $member: string) -> int
+offset_of :: ($T: Type, $member: string) -> int #compile_time
 #modify {
     ti := cast(*Type_Info) T;
     if ti.type != .STRUCT return false;
