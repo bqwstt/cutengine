@@ -99,7 +99,7 @@ renderer_begin_frame :: (window: *Window, data: *Gpu_Renderer_Data) -> Renderer_
     return frame, true;
 }
 
-z: float = -1.0;
+z: float = 1.0;
 
 renderer_draw_mesh :: (frame: *Renderer_Frame, data: *Gpu_Renderer_Data)
 {
@@ -111,21 +111,26 @@ renderer_draw_mesh :: (frame: *Renderer_Frame, data: *Gpu_Renderer_Data)
     rot: Quaternion;
     set_from_axis_and_angle(*rot, 0, 0, 1, dt);
 
-    z -= 0.001;
+    z += 0.001;
 
     FOV :: 90;
     aspect_ratio := frame.width / cast(float) frame.height;
-    projection_matrix := make_projection_matrix(FOV * PI / 180.0, aspect_ratio, 0.1, 1000.0);
-    view_matrix := 
-        make_translation_matrix4(Vector3.{ 0, 0, z })
-        * make_scale_matrix4(Vector3.{ 2.0, 0.5, 0.0 });
 
-    matrix_uniform := projection_matrix * view_matrix;
+    camera_matrix := make_translation_matrix4(Vector3.{ 0, 0, z });
+    model_matrix := make_translation_matrix4(Vector3.{ 0, 0, 0 }) * make_scale_matrix4(Vector3.{ 2.0, 0.5, 1.0 });
+    success, view_matrix := inverse(camera_matrix);
+    if !success {
+        log_error("Couldn't inverse view matrix!");
+    }
+
+    projection_matrix := make_projection_matrix(FOV * PI / 180.0, aspect_ratio, 0.1, 1000.0, depth_range_01 = true);
+    view_projection_matrix := projection_matrix * view_matrix;
 
     SDL_BindGPUVertexBuffers(frame.pass, 0, *vertex_binding, 1);
     SDL_BindGPUIndexBuffer(frame.pass, *index_binding, SDL_GPUIndexElementSize._32BIT);
     SDL_BindGPUFragmentSamplers(frame.pass, 0, *sampler_binding, 1);
-    SDL_PushGPUVertexUniformData(frame.command_buffer, 0, *matrix_uniform, size_of(Matrix4));
+    SDL_PushGPUVertexUniformData(frame.command_buffer, 0, *view_projection_matrix, size_of(Matrix4));
+    SDL_PushGPUVertexUniformData(frame.command_buffer, 1, *model_matrix, size_of(Matrix4));
     SDL_DrawGPUIndexedPrimitives(frame.pass, INDICES.count, 1, 0, 0, 0);
 }
 
@@ -193,7 +198,7 @@ load_shader :: (device: *SDL_GPUDevice, path: string, num_samplers: u32 = 0) -> 
     shader_info.format = format;
     shader_info.stage = stage;
     shader_info.num_samplers = num_samplers;
-    shader_info.num_uniform_buffers = 1;
+    shader_info.num_uniform_buffers = 2;
 
     return SDL_CreateGPUShader(device, *shader_info);
 }
