@@ -48,8 +48,6 @@ sdl_gpu_renderer_drop :: (window: *Window, data: *Gpu_Renderer_Data)
 
 sdl_gpu_renderer_draw :: (window: *Window, data: *Gpu_Renderer_Data)
 {
-    dt += 0.01;
-
     frame, ok := renderer_begin_frame(window, data);
     if ok {
         renderer_draw_mesh(*frame, data);
@@ -109,20 +107,22 @@ renderer_draw_mesh :: (frame: *Renderer_Frame, data: *Gpu_Renderer_Data)
 
     // @FIXME: Test code, remove.
     rot: Quaternion;
-    set_from_axis_and_angle(*rot, 0, 0, 1, dt);
+    set_from_axis_and_angle(*rot, 1, 1, 1, dt);
 
+    dt -= 0.01;
     z += 0.001;
 
-    FOV :: 90;
-    aspect_ratio := frame.width / cast(float) frame.height;
+    model_matrix := make_translation_matrix4(Vector3.{ 0, 0, 0 }) * make_scale_matrix4(Vector3.{ 0.5, 0.5, 1.0 });
+    model_matrix = rotate(model_matrix, rot);
 
     camera_matrix := make_translation_matrix4(Vector3.{ 0, 0, z });
-    model_matrix := make_translation_matrix4(Vector3.{ 0, 0, 0 }) * make_scale_matrix4(Vector3.{ 2.0, 0.5, 1.0 });
     success, view_matrix := inverse(camera_matrix);
     if !success {
         log_error("Couldn't inverse view matrix!");
     }
 
+    FOV :: 90;
+    aspect_ratio := frame.width / cast(float) frame.height;
     projection_matrix := make_projection_matrix(FOV * PI / 180.0, aspect_ratio, 0.1, 1000.0, depth_range_01 = true);
     view_projection_matrix := projection_matrix * view_matrix;
 
