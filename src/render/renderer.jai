@@ -1,4 +1,4 @@
-renderer_make :: (window: *SDL_Window, backend: Backend_Kind, width: s32, height: s32) -> Renderer, bool
+renderer_init :: (window: *Window, backend: Backend_Kind, width: s32, height: s32) -> Renderer, bool
 {
     ren: Renderer;
     ren.backend = backend;
@@ -8,12 +8,14 @@ renderer_make :: (window: *SDL_Window, backend: Backend_Kind, width: s32, height
 
     if #complete backend == {
     case .SOFTWARE;
+    /* @FIXME: Removed until this works.
         data, ok := software_renderer_make(window, width, height);
         if !ok  return .{}, false;
 
         ren.software_data = data;
+    */
     case .GPU;
-        data, ok := gpu_renderer_make(window);
+        data, ok := sdl_gpu_renderer_make(window);
         if !ok  return .{}, false;
 
         ren.gpu_data = data;
@@ -26,9 +28,11 @@ renderer_drop :: (using ren: *Renderer)
 {
     if #complete backend == {
     case .SOFTWARE;
+    /* @FIXME: Removed until this works.
         software_renderer_drop(*software_data);
+    */
     case .GPU;
-        gpu_renderer_drop(window, *gpu_data);
+        sdl_gpu_renderer_drop(window, *gpu_data);
     }
 
     ren.* = .{};
@@ -38,9 +42,11 @@ renderer_draw :: (using ren: *Renderer)
 {
     if #complete backend == {
     case .SOFTWARE;
+    /* @FIXME: Removed until this works.
         software_renderer_draw(*software_data);
+    */
     case .GPU;
-        gpu_renderer_draw(window, *gpu_data);
+        sdl_gpu_renderer_draw(window, *gpu_data);
     }
 }
 
@@ -50,8 +56,8 @@ Backend_Kind :: enum u32 {
 }
 
 Renderer :: struct {
-    window: *SDL_Window;
-    width: s32;
+    window: *Window;
+    width:  s32;
     height: s32;
 
     using data: Backend_Data;
@@ -61,5 +67,7 @@ Renderer :: struct {
     }
 }
 
+#load "renderer_software.jai";
+#load "renderer_sdl_gpu.jai";
+
 #import "Basic";
-#import "SDL3";

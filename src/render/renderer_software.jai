@@ -168,3 +168,4 @@ draw_projected_triangle :: (fb: Framebuffer, camera: Camera, triangle: Triangle,
 }
 
 #import "Math";
+#import "SDL3"; // @FIXME: This shouldn't really be dependant on SDL

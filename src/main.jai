@@ -25,60 +25,60 @@ WINDOW_HEIGHT :: 1080;
 PERMANENT_MEMORY_SIZE :: 256 * 1024 * 1024;
 TRANSIENT_MEMORY_SIZE :: 512 * 1024 * 1024;
 
-app_init :: (_: **void, argc: s32, argv: **u8) -> SDL_AppResult
-{
-    SDL_SetAppMetadata("cutengine", "v0.0.1", "com.engine.cutengine");
+// app_init :: (_: **void, argc: s32, argv: **u8) -> SDL_AppResult
+// {
+//     SDL_SetAppMetadata("cutengine", "v0.0.1", "com.engine.cutengine");
 
-    ok := SDL_InitSubSystem(.VIDEO);
-    if !ok {
-        log_error("Couldn't initialize SDL: %", SDL_GetErrorString());
-        return .FAILURE;
-    }
+//     ok := SDL_InitSubSystem(.VIDEO);
+//     if !ok {
+//         log_error("Couldn't initialize SDL: %", SDL_GetErrorString());
+//         return .FAILURE;
+//     }
 
-    // Use high pixel density, otherwise we have blurry edges on MacOS
-    window_flags: SDL_WindowFlags = .HIGH_PIXEL_DENSITY | .RESIZABLE;
-    window := SDL_CreateWindow("cutengine", WINDOW_WIDTH, WINDOW_HEIGHT, window_flags);
-    if !window {
-        log_error("Couldn't create window: %", SDL_GetErrorString());
-        return .FAILURE;
-    }
+//     // Use high pixel density, otherwise we have blurry edges on MacOS
+//     window_flags: SDL_WindowFlags = .HIGH_PIXEL_DENSITY | .RESIZABLE;
+//     window := SDL_CreateWindow("cutengine", WINDOW_WIDTH, WINDOW_HEIGHT, window_flags);
+//     if !window {
+//         log_error("Couldn't create window: %", SDL_GetErrorString());
+//         return .FAILURE;
+//     }
 
-    state.window = window;
-    state.renderer, ok = renderer_make(window, .GPU, WINDOW_WIDTH, WINDOW_HEIGHT);
-    if !ok  return .FAILURE;
+//     state.window = window;
+//     state.renderer, ok = renderer_make(window, .GPU, WINDOW_WIDTH, WINDOW_HEIGHT);
+//     if !ok  return .FAILURE;
 
-    log("Initialized SDL using GPU acceleration");
-    return .CONTINUE;
-}
+//     log("Initialized SDL using GPU acceleration");
+//     return .CONTINUE;
+// }
 
-app_event :: (_: *void, event: *SDL_Event) -> SDL_AppResult
-{
-    if event.type == {
-    case .QUIT;
-        return .SUCCESS;
-    case .KEY_DOWN;
-        if event.key.key == SDLK_ESCAPE {
-            return .SUCCESS;
-        }
-    }
+// app_event :: (_: *void, event: *SDL_Event) -> SDL_AppResult
+// {
+//     if event.type == {
+//     case .QUIT;
+//         return .SUCCESS;
+//     case .KEY_DOWN;
+//         if event.key.key == SDLK_ESCAPE {
+//             return .SUCCESS;
+//         }
+//     }
 
-    return .CONTINUE;
-}
+//     return .CONTINUE;
+// }
 
-app_iterate :: (_: *void) -> SDL_AppResult
-{
-    renderer_draw(*state.renderer);
-    reset_temporary_storage();
-    return .CONTINUE;
-}
+// app_iterate :: (_: *void) -> SDL_AppResult
+// {
+//     renderer_draw(*state.renderer);
+//     reset_temporary_storage();
+//     return .CONTINUE;
+// }
 
-app_quit :: (_: *void, result: SDL_AppResult)
-{
-    renderer_drop(*state.renderer);
-    if state.window  SDL_DestroyWindow(state.window);
+// app_quit :: (_: *void, result: SDL_AppResult)
+// {
+//     renderer_drop(*state.renderer);
+//     if state.window  SDL_DestroyWindow(state.window);
 
-    SDL_Quit();
-}
+//     SDL_Quit();
+// }
 
 main :: ()
 {
@@ -110,9 +110,10 @@ main :: ()
     defer platform_shutdown(*window);
 
     memory, memory_ok := engine_memory_make(PERMANENT_MEMORY_SIZE, TRANSIENT_MEMORY_SIZE);
-    if !memory_ok  return;
+    // @FIXME: Skip check for now
+    // if !memory_ok  return;
 
-    renderer, renderer_ok := renderer_make(*window, .GPU, WINDOW_WIDTH, WINDOW_HEIGHT);
+    renderer, renderer_ok := renderer_init(*window, .GPU, WINDOW_WIDTH, WINDOW_HEIGHT);
     if !renderer_ok  return;
     defer renderer_drop(*renderer);
 
@@ -125,7 +126,7 @@ main :: ()
         last_time = now;
 
         platform_poll_events(*window, *input);
-        renderer_draw(*renderer, *window);
+        renderer_draw(*renderer);
         reset_temporary_storage();
     }
 }
@@ -134,8 +135,6 @@ main :: ()
 #load "engine/scene.jai";
 #load "engine/model.jai";
 #load "render/renderer.jai";
-#load "render/software.jai";
-#load "render/gpu.jai";
 
 #import "Basic";
 #import "SDL3";

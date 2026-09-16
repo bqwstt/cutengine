@@ -2,9 +2,10 @@
 
 #scope_export
 
-gpu_renderer_make :: (window: *SDL_Window) -> Gpu_Renderer_Data, bool
+sdl_gpu_renderer_make :: (window: *Window) -> Gpu_Renderer_Data, bool
 {
     // Create device, pipeline and vertex buffer
+    sdl_window := convert_to_sdl_window(window);
     format_flags: SDL_GPUShaderFormat = SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL | SDL_GPU_SHADERFORMAT_MSL;
     device := SDL_CreateGPUDevice(format_flags, DEBUG, null);
     if !device {
@@ -12,10 +13,10 @@ gpu_renderer_make :: (window: *SDL_Window) -> Gpu_Renderer_Data, bool
         return .{}, false;
     }
 
-    device_window_ok := SDL_ClaimWindowForGPUDevice(device, window);
+    device_window_ok := SDL_ClaimWindowForGPUDevice(device, sdl_window);
     assert(device_window_ok, "Couldn't claim window for GPU device: %", SDL_GetErrorString());
 
-    pipeline := create_pipeline(window, device);
+    pipeline := create_pipeline(sdl_window, device);
     if !pipeline {
         log_error("Couldn't create graphics pipeline: %", SDL_GetErrorString());
         return .{}, false;
@@ -46,24 +47,27 @@ gpu_renderer_make :: (window: *SDL_Window) -> Gpu_Renderer_Data, bool
     return data, true;
 }
 
-gpu_renderer_drop :: (window: *SDL_Window, data: *Gpu_Renderer_Data)
+sdl_gpu_renderer_drop :: (window: *Window, data: *Gpu_Renderer_Data)
 {
-    mesh_drop(data.device, *data.mesh);
+    sdl_window := convert_to_sdl_window(window);
+    mesh_drop(data, *data.mesh);
     SDL_ReleaseGPUSampler(data.device, data.sampler);
     SDL_ReleaseGPUGraphicsPipeline(data.device, data.pipeline);
-    SDL_ReleaseWindowFromGPUDevice(data.device, window);
+    SDL_ReleaseWindowFromGPUDevice(data.device, sdl_window);
     SDL_DestroyGPUDevice(data.device);
 }
 
-gpu_renderer_draw :: (window: *SDL_Window, data: *Gpu_Renderer_Data)
+sdl_gpu_renderer_draw :: (window: *Window, data: *Gpu_Renderer_Data)
 {
+    sdl_window := convert_to_sdl_window(window);
+
     // Create command buffer for batching requests to the GPU
     cmd := SDL_AcquireGPUCommandBuffer(data.device);
     assert(cmd != null, "Couldn't acquire GPU command buffer: %", SDL_GetErrorString());
 
     // Create a swapchain texture to draw in between frames
     swapchain_texture: *SDL_GPUTexture;
-    ok := SDL_WaitAndAcquireGPUSwapchainTexture(cmd, window, *swapchain_texture, null, null); 
+    ok := SDL_WaitAndAcquireGPUSwapchainTexture(cmd, sdl_window, *swapchain_texture, null, null); 
     assert(ok, "Couldn't acquire swapchain texture: %", SDL_GetErrorString());
 
     // Check needed: the swapchain texture can be null in certain cases, i.e. the window is minimized.
@@ -82,15 +86,16 @@ gpu_renderer_draw :: (window: *SDL_Window, data: *Gpu_Renderer_Data)
         ];
         index_buffer := SDL_GPUBufferBinding.{ buffer = data.mesh.index_buffer, offset = 0 };
 
-        texture_sampler := SDL_GPUTextureSamplerBinding.{
-            // texture = data.mesh.texture,
-            sampler = data.sampler,
-        };
+        // @FIXME: Revert
+        // texture_sampler := SDL_GPUTextureSamplerBinding.{
+        //     texture = data.mesh.texture,
+        //     sampler = data.sampler,
+        // };
 
         SDL_BindGPUGraphicsPipeline(render_pass, data.pipeline);
         SDL_BindGPUVertexBuffers(render_pass, 0, vertex_buffers.data, vertex_buffers.count);
         SDL_BindGPUIndexBuffer(render_pass, *index_buffer, SDL_GPUIndexElementSize._32BIT);
-        SDL_BindGPUFragmentSamplers(render_pass, 0, *texture_sampler, 1);
+        // SDL_BindGPUFragmentSamplers(render_pass, 0, *texture_sampler, 1);
         SDL_DrawGPUIndexedPrimitives(render_pass, INDICES.count, 1, 0, 0, 0);
 
         SDL_EndGPURenderPass(render_pass);
@@ -112,19 +117,21 @@ Gpu_Renderer_Data :: struct {
 
 #scope_file
 
-gpu_renderer_get_texture :: (data: *Gpu_Renderer_Data, h: Texture_Handle) -> *SDL_GPUTexture
+get_texture :: (data: *Gpu_Renderer_Data, h: Texture_Handle) -> *SDL_GPUTexture
 {
-
+    return null;
 }
 
-gpu_mesh_drop :: (device: *SDL_GPUDevice, renderer: *Gpu_Renderer_Data, m: *Gpu_Mesh)
+mesh_drop :: (renderer: *Gpu_Renderer_Data, m: *Gpu_Mesh)
 {
-    SDL_ReleaseGPUBuffer(device, m.vertex_buffer);
-    SDL_ReleaseGPUBuffer(device, m.index_buffer);
+    SDL_ReleaseGPUBuffer(renderer.device, m.vertex_buffer);
+    SDL_ReleaseGPUBuffer(renderer.device, m.index_buffer);
 
     for m.textures {
-        tex := gpu_renderer_get_texture(renderer, it.handle);
-        SDL_ReleaseGPUTexture(device, tex);
+        tex := get_texture(renderer, it);
+        if tex {
+            SDL_ReleaseGPUTexture(renderer.device, tex);
+        }
     }
 }
 
@@ -180,7 +187,8 @@ load_shader :: (device: *SDL_GPUDevice, path: string, num_samplers: u32 = 0) -> 
     shader_info.entrypoint = entrypoint;
     shader_info.format = format;
     shader_info.stage = stage;
-    shader_info.num_samplers = num_samplers;
+    // @FIXME: Revert
+    // shader_info.num_samplers = num_samplers;
 
     return SDL_CreateGPUShader(device, *shader_info);
 }
@@ -233,7 +241,7 @@ create_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice) -> *SDL_GPUGrap
     return SDL_CreateGPUGraphicsPipeline(device, *pci);
 }
 
-create_buffers :: (device: *SDL_GPUDevice, vertices: []Vertex, indices: []u32) -> Mesh, bool
+create_buffers :: (device: *SDL_GPUDevice, vertices: []Vertex, indices: []u32) -> Gpu_Mesh, bool
 {
     // Create vertex buffer
     vertex_buffer_info := SDL_GPUBufferCreateInfo.{
@@ -373,7 +381,20 @@ create_buffers :: (device: *SDL_GPUDevice, vertices: []Vertex, indices: []u32) -
     assert(ok, "Couldn't submit GPU command buffer: %", SDL_GetErrorString());
 
     // return Gpu_Mesh.{ vertex_buffer, index_buffer, .{ sdl_tex = texture } }, true;
-    return Gpu_Mesh.{ vertex_buffer, index_buffer }, true;
+    textures := Texture_Handle.[];
+    
+    m: Gpu_Mesh;
+    m.vertex_buffer = vertex_buffer;
+    m.index_buffer  = index_buffer;
+    m.textures = textures;
+    return m, true;
+}
+
+// @FIXME: For now, until I think how to overlap the two layers together, this is
+// copied from platform_sdl.jai
+convert_to_sdl_window :: (w: *Window) -> *SDL_Window
+{
+    return cast(*SDL_Window) w.native;
 }
 
 Gpu_Mesh :: struct {

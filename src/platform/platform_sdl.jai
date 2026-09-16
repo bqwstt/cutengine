@@ -2,6 +2,7 @@ platform_init :: (title: string, width: s32, height: s32) -> Window, bool
 {
     SDL_SetAppMetadata("cutengine", "v0.0.1", "com.engine.cutengine");
 
+    log("ok opened window bich");
     ok := SDL_InitSubSystem(.VIDEO);
     if !ok {
         log_error("Couldn't initialize SDL: %", SDL_GetErrorString());
