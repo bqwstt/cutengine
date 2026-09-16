@@ -2,13 +2,6 @@
 
 #scope_export
 
-Gpu_Renderer_Data :: struct {
-    device: *SDL_GPUDevice;
-    pipeline: *SDL_GPUGraphicsPipeline;
-    sampler: *SDL_GPUSampler;
-    mesh: Mesh;
-}
-
 gpu_renderer_make :: (window: *SDL_Window) -> Gpu_Renderer_Data, bool
 {
     // Create device, pipeline and vertex buffer
@@ -90,7 +83,7 @@ gpu_renderer_draw :: (window: *SDL_Window, data: *Gpu_Renderer_Data)
         index_buffer := SDL_GPUBufferBinding.{ buffer = data.mesh.index_buffer, offset = 0 };
 
         texture_sampler := SDL_GPUTextureSamplerBinding.{
-            texture = data.mesh.texture,
+            // texture = data.mesh.texture,
             sampler = data.sampler,
         };
 
@@ -108,44 +101,32 @@ gpu_renderer_draw :: (window: *SDL_Window, data: *Gpu_Renderer_Data)
     assert(ok, "Couldn't submit command buffer to GPU: %", SDL_GetErrorString());
 }
 
+Gpu_Renderer_Data :: struct {
+    device: *SDL_GPUDevice;
+    pipeline: *SDL_GPUGraphicsPipeline;
+    sampler: *SDL_GPUSampler;
+    mesh: Gpu_Mesh;
+}
+
 // #region Shaders
 
 #scope_file
 
-Mesh :: struct {
-    vertex_buffer: *SDL_GPUBuffer;
-    index_buffer: *SDL_GPUBuffer;
-    texture: *SDL_GPUTexture;
+gpu_renderer_get_texture :: (data: *Gpu_Renderer_Data, h: Texture_Handle) -> *SDL_GPUTexture
+{
+
 }
 
-Vertex :: struct {
-    position: Vector3;
-    texture: Vector2;
+gpu_mesh_drop :: (device: *SDL_GPUDevice, renderer: *Gpu_Renderer_Data, m: *Gpu_Mesh)
+{
+    SDL_ReleaseGPUBuffer(device, m.vertex_buffer);
+    SDL_ReleaseGPUBuffer(device, m.index_buffer);
+
+    for m.textures {
+        tex := gpu_renderer_get_texture(renderer, it.handle);
+        SDL_ReleaseGPUTexture(device, tex);
+    }
 }
-
-VERTICES :: Vertex.[
-    //       Position (NDC)                   Texture (UV)
-    Vertex.{ position = .{ -0.5, -0.5, 0.0 }, texture = .{ 0, 1 } }, // Bottom-left
-    Vertex.{ position = .{  0.5, -0.5, 0.0 }, texture = .{ 1, 1 } }, // Bottom-right
-    Vertex.{ position = .{ -0.5,  0.5, 0.0 }, texture = .{ 0, 0 } }, // Top-left
-    Vertex.{ position = .{  0.5,  0.5, 0.0 }, texture = .{ 1, 0 } }  // Top-right
-];
-
-// What am I going to send?
-VERTEX_BUFFER_DESCRIPTIONS :: SDL_GPUVertexBufferDescription.[
-    .{ slot = 0, pitch = size_of(Vertex), input_rate = .VERTEX, instance_step_rate = 0 }
-];
-
-// How is the thing I am going to send look like?
-VERTEX_ATTRIBUTES :: SDL_GPUVertexAttribute.[
-    .{ location = 0, buffer_slot = 0, format = .FLOAT3, offset = #run offset_of(Vertex, "position") }, // Position attribute
-    .{ location = 1, buffer_slot = 0, format = .FLOAT2, offset = #run offset_of(Vertex, "texture") },  // Texture attribute
-];
-
-INDICES :: u32.[
-    0, 1, 2, // Face 1: Bottom-left -> Bottom-right -> Top-left
-    1, 3, 2  // Face 2: Bottom-right -> Top-right -> Top-left
-];
 
 /// @TODO: This can be done at compile time, probably
 load_shader :: (device: *SDL_GPUDevice, path: string, num_samplers: u32 = 0) -> *SDL_GPUShader
@@ -391,30 +372,45 @@ create_buffers :: (device: *SDL_GPUDevice, vertices: []Vertex, indices: []u32) -
     ok := SDL_SubmitGPUCommandBuffer(upload_cmd_buf); 
     assert(ok, "Couldn't submit GPU command buffer: %", SDL_GetErrorString());
 
-    return Mesh.{ vertex_buffer, index_buffer, texture }, true;
+    // return Gpu_Mesh.{ vertex_buffer, index_buffer, .{ sdl_tex = texture } }, true;
+    return Gpu_Mesh.{ vertex_buffer, index_buffer }, true;
 }
 
-mesh_drop :: (device: *SDL_GPUDevice, m: *Mesh)
-{
-    SDL_ReleaseGPUBuffer(device, m.vertex_buffer);
-    SDL_ReleaseGPUBuffer(device, m.index_buffer);
-    SDL_ReleaseGPUTexture(device, m.texture);
+Gpu_Mesh :: struct {
+    using #as m: Mesh_Data;
+
+    vertex_buffer: *SDL_GPUBuffer;
+    // vertex_attributes: [field_count(Vertex)]SDL_GPUVertexAttribute;
+    index_buffer: *SDL_GPUBuffer;
 }
 
-/// Helper for grabbing the offsite of a member in a struct
-offset_of :: ($T: Type, $member: string) -> int #compile_time
-#modify {
-    ti := cast(*Type_Info) T;
-    if ti.type != .STRUCT return false;
-
-    return true;
-} {
-    for type_info(T).members {
-        if it.name == member  return it.offset_in_bytes;
-    }
-
-    assert(false, "Type '%' does not have member '%'", T, member);
-    return -1;
+Gpu_Texture :: struct {
+    handle: *SDL_GPUTexture;
 }
+
+VERTICES :: Vertex.[
+    //       Position (NDC)                   Texture (UV)
+    Vertex.{ position = .{ -0.5, -0.5, 0.0 }, texture_coords = .{ 0, 1 } }, // Bottom-left
+    Vertex.{ position = .{  0.5, -0.5, 0.0 }, texture_coords = .{ 1, 1 } }, // Bottom-right
+    Vertex.{ position = .{ -0.5,  0.5, 0.0 }, texture_coords = .{ 0, 0 } }, // Top-left
+    Vertex.{ position = .{  0.5,  0.5, 0.0 }, texture_coords = .{ 1, 0 } }  // Top-right
+];
+
+// What am I going to send?
+VERTEX_BUFFER_DESCRIPTIONS :: SDL_GPUVertexBufferDescription.[
+    .{ slot = 0, pitch = size_of(Vertex), input_rate = .VERTEX, instance_step_rate = 0 }
+];
+
+// How is the thing I am going to send look like?
+VERTEX_ATTRIBUTES :: SDL_GPUVertexAttribute.[
+    .{ location = 0, buffer_slot = 0, format = .FLOAT3, offset = #run offset_of(Vertex, "position") }, // Position attribute
+    .{ location = 1, buffer_slot = 0, format = .FLOAT2, offset = #run offset_of(Vertex, "texture_coords") },  // Texture attribute
+];
+
+INDICES :: u32.[
+    0, 1, 2, // Face 1: Bottom-left -> Bottom-right -> Top-left
+    1, 3, 2  // Face 2: Bottom-right -> Top-right -> Top-left
+];
+
 
 #import "SDL3";

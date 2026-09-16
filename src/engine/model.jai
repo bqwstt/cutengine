@@ -1,12 +1,3 @@
-Face :: struct {
-    a, b, c: s32;
-}
-
-Model :: struct {
-    vertices: []Vector3;
-    faces:    []Face;
-}
-
 /// Load an .obj model from a filepath. Currently reads vertices (`v` components) and faces (`f` components).
 /// There is no support for vertex normals or materials.
 model_load :: (path: string) -> Model, bool
@@ -73,6 +64,70 @@ model_drop :: (m: *Model)
 {
     array_free(m.faces);
     array_free(m.vertices);
+}
+
+/// Helper for grabbing the offsite of a member in a struct
+offset_of :: ($T: Type, $member: string) -> int #compile_time
+#modify {
+    ti := cast(*Type_Info) T;
+    if ti.type != .STRUCT return false;
+
+    return true;
+} {
+    for type_info(T).members {
+        if it.name == member  return it.offset_in_bytes;
+    }
+
+    assert(false, "Type '%' does not have member '%'", T, member);
+    return -1;
+}
+
+field_count :: ($T: Type) -> u8 #compile_time
+#modify {
+    ti := cast(*Type_Info) T;
+    if ti.type != .STRUCT return false;
+
+    return true;
+} {
+    ti := cast(*Type_Info_Struct) T;
+    n := 0;
+
+    for ti.members {
+        if !(it.flags & .CONSTANT)  n += 1;
+    }
+
+    return n;
+}
+
+Handle :: struct($T: Type) {
+    index: u32;
+    generation: u32;
+}
+
+Texture :: struct {} // @Opaque
+Mesh    :: struct {} // @Opaque
+
+Mesh_Handle    :: #type,distinct Handle(Mesh);
+Texture_Handle :: #type,distinct Handle(Texture);
+
+Mesh_Data :: struct {
+    vertices: []Vertex;
+    indices:  []u32;
+    textures: []Texture_Handle; // @TODO: Replace with handle-based container
+}
+
+Vertex :: struct {
+    position: Vector3;
+    texture_coords: Vector2;
+}
+
+Face :: struct {
+    a, b, c: s32;
+}
+
+Model :: struct {
+    vertices: []Vector3;
+    faces:    []Face;
 }
 
 #import "Basic";

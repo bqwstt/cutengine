@@ -1,22 +1,3 @@
-#scope_export
-
-Backend_Kind :: enum u32 {
-    GPU :: 0;
-    SOFTWARE :: 1;
-}
-
-Renderer :: struct {
-    window: *SDL_Window;
-    width: s32;
-    height: s32;
-
-    using data: Backend_Data;
-    Backend_Data :: union backend: Backend_Kind {
-        .SOFTWARE ,, software_data: Software_Renderer_Data;
-        .GPU      ,, gpu_data: Gpu_Renderer_Data;
-    }
-}
-
 renderer_make :: (window: *SDL_Window, backend: Backend_Kind, width: s32, height: s32) -> Renderer, bool
 {
     ren: Renderer;
@@ -60,6 +41,23 @@ renderer_draw :: (using ren: *Renderer)
         software_renderer_draw(*software_data);
     case .GPU;
         gpu_renderer_draw(window, *gpu_data);
+    }
+}
+
+Backend_Kind :: enum u32 {
+    GPU :: 0;
+    SOFTWARE :: 1;
+}
+
+Renderer :: struct {
+    window: *SDL_Window;
+    width: s32;
+    height: s32;
+
+    using data: Backend_Data;
+    Backend_Data :: union backend: Backend_Kind {
+        .SOFTWARE ,, software_data: Software_Renderer_Data;
+        .GPU      ,, gpu_data: Gpu_Renderer_Data;
     }
 }
 

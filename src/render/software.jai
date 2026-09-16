@@ -1,3 +1,95 @@
+framebuffer_make :: (width: s32, height: s32) -> Framebuffer
+{
+    fb: Framebuffer;
+    fb.width = width;
+    fb.height = height;
+    fb.pixels = NewArray(width * height, u32);
+    return fb;
+}
+
+framebuffer_drop :: (fb: *Framebuffer)
+{
+    array_free(fb.pixels);
+    fb.* = .{};
+}
+
+framebuffer_clear :: (fb: Framebuffer, color: Color)
+{
+    for * fb.pixels  it.* = xx color;
+}
+
+framebuffer_draw_model :: (fb: Framebuffer, camera: Camera, model: Model, color: Color)
+{
+    // Draw all projected vertices in the form of triangles
+    for model.faces {
+        face: Face = it;
+        vertex_a := model.vertices[face.a];
+        vertex_b := model.vertices[face.b];
+        vertex_c := model.vertices[face.c];
+
+        triangle := Triangle.{ vertex_a, vertex_b, vertex_c };
+        draw_projected_triangle(fb, camera, triangle, color);
+    }
+}
+
+software_renderer_make :: (window: *SDL_Window, width: s32, height: s32) -> Software_Renderer_Data, bool
+{
+    // Create internal SDL renderer and texture to draw to
+    sdl_renderer := SDL_CreateRenderer(window, null);
+    if !sdl_renderer {
+        log_error("Couldn't create SDL renderer: %", SDL_GetErrorString());
+        return .{}, false;
+    }
+
+    if !SDL_SetRenderVSync(sdl_renderer, 1) {
+        log_error("Couldn't set renderer VSync: %", SDL_GetErrorString());
+        return .{}, false;
+    }
+
+    texture := SDL_CreateTexture(sdl_renderer, .ARGB8888, .STREAMING, width, height);
+    if !texture {
+        log_error("Couldn't create texture for software renderer: %", SDL_GetErrorString());
+        return .{}, false;
+    }
+
+    framebuffer := framebuffer_make(width, height);
+
+    data: Software_Renderer_Data;
+    data.framebuffer = framebuffer;
+    data.texture = texture;
+    data.sdl_renderer = sdl_renderer;
+    return data, true;
+}
+
+software_renderer_drop :: (data: *Software_Renderer_Data)
+{
+    if data.texture  SDL_DestroyTexture(data.texture);
+    if data.sdl_renderer  SDL_DestroyRenderer(data.sdl_renderer);
+    framebuffer_drop(*data.framebuffer);
+}
+
+software_renderer_draw :: (data: *Software_Renderer_Data)
+{
+    // Clear framebuffer and update the texture with the new data, then present it.
+    fb := data.framebuffer;
+    framebuffer_clear(fb, .BLACK);
+    SDL_UpdateTexture(data.texture, null, fb.pixels.data, fb.width * size_of(u32));
+    SDL_RenderTexture(data.sdl_renderer, data.texture, null, null);
+    SDL_RenderPresent(data.sdl_renderer);
+}
+
+Framebuffer :: struct {
+    pixels: []u32;
+    width: s32;
+    height: s32;
+}
+
+Software_Renderer_Data :: struct {
+    framebuffer: Framebuffer;
+    texture: *SDL_Texture;
+    sdl_renderer: *SDL_Renderer;
+}
+
 #scope_file
 
 /// Color pixel at (x, y)
@@ -73,100 +165,6 @@ draw_projected_triangle :: (fb: Framebuffer, camera: Camera, triangle: Triangle,
     draw_projected_line(fb, camera, a_b, color);
     draw_projected_line(fb, camera, b_c, color);
     draw_projected_line(fb, camera, c_a, color);
-}
-
-#scope_export
-
-Framebuffer :: struct {
-    pixels: []u32;
-    width: s32;
-    height: s32;
-}
-
-framebuffer_make :: (width: s32, height: s32) -> Framebuffer
-{
-    fb: Framebuffer;
-    fb.width = width;
-    fb.height = height;
-    fb.pixels = NewArray(width * height, u32);
-    return fb;
-}
-
-framebuffer_drop :: (fb: *Framebuffer)
-{
-    array_free(fb.pixels);
-    fb.* = .{};
-}
-
-framebuffer_clear :: (fb: Framebuffer, color: Color)
-{
-    for * fb.pixels  it.* = xx color;
-}
-
-framebuffer_draw_model :: (fb: Framebuffer, camera: Camera, model: Model, color: Color)
-{
-    // Draw all projected vertices in the form of triangles
-    for model.faces {
-        face: Face = it;
-        vertex_a := model.vertices[face.a];
-        vertex_b := model.vertices[face.b];
-        vertex_c := model.vertices[face.c];
-
-        triangle := Triangle.{ vertex_a, vertex_b, vertex_c };
-        draw_projected_triangle(fb, camera, triangle, color);
-    }
-}
-
-Software_Renderer_Data :: struct {
-    framebuffer: Framebuffer;
-    texture: *SDL_Texture;
-    sdl_renderer: *SDL_Renderer;
-}
-
-software_renderer_make :: (window: *SDL_Window, width: s32, height: s32) -> Software_Renderer_Data, bool
-{
-    // Create internal SDL renderer and texture to draw to
-    sdl_renderer := SDL_CreateRenderer(window, null);
-    if !sdl_renderer {
-        log_error("Couldn't create SDL renderer: %", SDL_GetErrorString());
-        return .{}, false;
-    }
-
-    if !SDL_SetRenderVSync(sdl_renderer, 1) {
-        log_error("Couldn't set renderer VSync: %", SDL_GetErrorString());
-        return .{}, false;
-    }
-
-    texture := SDL_CreateTexture(sdl_renderer, .ARGB8888, .STREAMING, width, height);
-    if !texture {
-        log_error("Couldn't create texture for software renderer: %", SDL_GetErrorString());
-        return .{}, false;
-    }
-
-    framebuffer := framebuffer_make(width, height);
-
-    data: Software_Renderer_Data;
-    data.framebuffer = framebuffer;
-    data.texture = texture;
-    data.sdl_renderer = sdl_renderer;
-    return data, true;
-}
-
-software_renderer_drop :: (data: *Software_Renderer_Data)
-{
-    if data.texture  SDL_DestroyTexture(data.texture);
-    if data.sdl_renderer  SDL_DestroyRenderer(data.sdl_renderer);
-    framebuffer_drop(*data.framebuffer);
-}
-
-software_renderer_draw :: (data: *Software_Renderer_Data)
-{
-    // Clear framebuffer and update the texture with the new data, then present it.
-    fb := data.framebuffer;
-    framebuffer_clear(fb, .BLACK);
-    SDL_UpdateTexture(data.texture, null, fb.pixels.data, fb.width * size_of(u32));
-    SDL_RenderTexture(data.sdl_renderer, data.texture, null, null);
-    SDL_RenderPresent(data.sdl_renderer);
 }
 
 #import "Math";
