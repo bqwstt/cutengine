@@ -367,7 +367,7 @@ mesh_create_and_upload :: (device: *SDL_GPUDevice, vertices: []Vertex, indices: 
     ok := SDL_SubmitGPUCommandBuffer(upload_cmd_buf); 
     assert(ok, "Couldn't submit GPU command buffer: %", SDL_GetErrorString());
 
-    // return Gpu_Mesh.{ vertex_buffer, index_buffer, .{ sdl_tex = texture } }, true;
+    // @FIXME: Fill in actual textures
     textures := Texture_Handle.[];
     
     m: Gpu_Mesh;

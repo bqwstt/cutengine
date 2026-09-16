@@ -2,7 +2,6 @@ platform_init :: (title: string, width: s32, height: s32) -> Window, bool
 {
     SDL_SetAppMetadata("cutengine", "v0.0.1", "com.engine.cutengine");
 
-    log("ok opened window bich");
     ok := SDL_InitSubSystem(.VIDEO);
     if !ok {
         log_error("Couldn't initialize SDL: %", SDL_GetErrorString());
@@ -11,7 +10,7 @@ platform_init :: (title: string, width: s32, height: s32) -> Window, bool
 
     // Use high pixel density, otherwise we have blurry edges on MacOS
     window_flags: SDL_WindowFlags = .HIGH_PIXEL_DENSITY | .RESIZABLE;
-    sdl_window := SDL_CreateWindow(to_c_string(title,,temp), WINDOW_WIDTH, WINDOW_HEIGHT, window_flags);
+    sdl_window := SDL_CreateWindow(to_c_string(title,,temp), width, height, window_flags);
     if !sdl_window {
         log_error("Couldn't create SDL window: %", SDL_GetErrorString());
         return .{}, false;
@@ -59,7 +58,5 @@ convert_to_sdl_window :: (w: *Window) -> *SDL_Window
 {
     return cast(*SDL_Window) w.native;
 }
-
-#load "platform.jai";
 
 #import "SDL3";

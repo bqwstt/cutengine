@@ -3,8 +3,6 @@ renderer_init :: (window: *Window, backend: Backend_Kind, width: s32, height: s3
     ren: Renderer;
     ren.backend = backend;
     ren.window = window;
-    ren.width = width;
-    ren.height = height;
 
     if #complete backend == {
     case .SOFTWARE;
@@ -57,8 +55,6 @@ Backend_Kind :: enum u32 {
 
 Renderer :: struct {
     window: *Window;
-    width:  s32;
-    height: s32;
 
     using data: Backend_Data;
     Backend_Data :: union backend: Backend_Kind {
