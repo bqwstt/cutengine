@@ -2,6 +2,8 @@
 
 #scope_export
 
+dt: float = 0;
+
 sdl_gpu_renderer_make :: (window: *Window) -> Gpu_Renderer_Data, bool
 {
     // Create device, pipeline and vertex buffer
@@ -48,6 +50,8 @@ sdl_gpu_renderer_draw :: (window: *Window, data: *Gpu_Renderer_Data)
 {
     sdl_window := convert_to_sdl_window(window);
 
+    dt += 0.01;
+
     // Create command buffer for batching requests to the GPU
     cmd := SDL_AcquireGPUCommandBuffer(data.device);
     assert(cmd != null, "Couldn't acquire GPU command buffer: %", SDL_GetErrorString());
@@ -78,11 +82,26 @@ sdl_gpu_renderer_draw :: (window: *Window, data: *Gpu_Renderer_Data)
             sampler = data.mesh.sampler,
         };
 
+        rot: Quaternion;
+        set_from_axis_and_angle(*rot, 0, 0, 1, dt);
+
+        matrix_uniform: Matrix_Uniform;
+        scale(*matrix_uniform.model, 0.1);
+        translate(*matrix_uniform.model, .{ 6, -6, 0.0 });
+        matrix_uniform.model = rotate(matrix_uniform.model, rot);
+        transpose(*matrix_uniform.model);
+
         SDL_BindGPUGraphicsPipeline(render_pass, data.pipeline);
         SDL_BindGPUVertexBuffers(render_pass, 0, vertex_buffers.data, vertex_buffers.count);
         SDL_BindGPUIndexBuffer(render_pass, *index_buffer, SDL_GPUIndexElementSize._32BIT);
         SDL_BindGPUFragmentSamplers(render_pass, 0, *texture_sampler, 1);
+        SDL_PushGPUVertexUniformData(cmd, 0, *matrix_uniform, size_of(Matrix_Uniform));
         SDL_DrawGPUIndexedPrimitives(render_pass, INDICES.count, 1, 0, 0, 0);
+
+        // Matrix4x4 matrixUniform = Matrix4x4_Multiply(
+		// 	Matrix4x4_CreateRotationZ(t),
+		// 	Matrix4x4_CreateTranslation(-0.5f, -0.5f, 0)
+		// );
 
         SDL_EndGPURenderPass(render_pass);
     }
@@ -102,11 +121,6 @@ Gpu_Renderer_Data :: struct {
 // #region Shaders
 
 #scope_file
-
-get_texture :: (data: *Gpu_Renderer_Data, h: Texture_Handle) -> *SDL_GPUTexture
-{
-    return null;
-}
 
 /// @TODO: This can be done at compile time, probably
 load_shader :: (device: *SDL_GPUDevice, path: string, num_samplers: u32 = 0) -> *SDL_GPUShader
@@ -161,6 +175,7 @@ load_shader :: (device: *SDL_GPUDevice, path: string, num_samplers: u32 = 0) -> 
     shader_info.format = format;
     shader_info.stage = stage;
     shader_info.num_samplers = num_samplers;
+    shader_info.num_uniform_buffers = 1;
 
     return SDL_CreateGPUShader(device, *shader_info);
 }
@@ -403,6 +418,12 @@ Gpu_Mesh :: struct {
 
 Gpu_Texture :: struct {
     handle: *SDL_GPUTexture;
+}
+
+Matrix_Uniform :: struct {
+    model: Matrix4 = Matrix4_Identity;
+    view: Matrix4 = Matrix4_Identity;
+    projection: Matrix4 = Matrix4_Identity;
 }
 
 VERTICES :: Vertex.[
