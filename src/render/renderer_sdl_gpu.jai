@@ -33,7 +33,7 @@ sdl_gpu_renderer_make :: (window: *Window) -> Gpu_Renderer_Data, bool
     sampler := SDL_CreateGPUSampler(device, *sampler_create_info);
     assert(sampler != null, "Couldn't create sampler: %", SDL_GetErrorString());
 
-    mesh, ok := create_buffers(device, VERTICES, INDICES);
+    mesh, ok := mesh_create_and_upload(device, VERTICES, INDICES);
     if !ok {
         log_error("Couldn't create mesh: %", SDL_GetErrorString());
         return .{}, false;
@@ -120,19 +120,6 @@ Gpu_Renderer_Data :: struct {
 get_texture :: (data: *Gpu_Renderer_Data, h: Texture_Handle) -> *SDL_GPUTexture
 {
     return null;
-}
-
-mesh_drop :: (renderer: *Gpu_Renderer_Data, m: *Gpu_Mesh)
-{
-    SDL_ReleaseGPUBuffer(renderer.device, m.vertex_buffer);
-    SDL_ReleaseGPUBuffer(renderer.device, m.index_buffer);
-
-    for m.textures {
-        tex := get_texture(renderer, it);
-        if tex {
-            SDL_ReleaseGPUTexture(renderer.device, tex);
-        }
-    }
 }
 
 /// @TODO: This can be done at compile time, probably
@@ -241,7 +228,7 @@ create_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice) -> *SDL_GPUGrap
     return SDL_CreateGPUGraphicsPipeline(device, *pci);
 }
 
-create_buffers :: (device: *SDL_GPUDevice, vertices: []Vertex, indices: []u32) -> Gpu_Mesh, bool
+mesh_create_and_upload :: (device: *SDL_GPUDevice, vertices: []Vertex, indices: []u32) -> Gpu_Mesh, bool
 {
     // Create vertex buffer
     vertex_buffer_info := SDL_GPUBufferCreateInfo.{
@@ -389,6 +376,20 @@ create_buffers :: (device: *SDL_GPUDevice, vertices: []Vertex, indices: []u32) -
     m.textures = textures;
     return m, true;
 }
+
+mesh_drop :: (renderer: *Gpu_Renderer_Data, m: *Gpu_Mesh)
+{
+    SDL_ReleaseGPUBuffer(renderer.device, m.vertex_buffer);
+    SDL_ReleaseGPUBuffer(renderer.device, m.index_buffer);
+
+    for m.textures {
+        tex := get_texture(renderer, it);
+        if tex {
+            SDL_ReleaseGPUTexture(renderer.device, tex);
+        }
+    }
+}
+
 
 // @FIXME: For now, until I think how to overlap the two layers together, this is
 // copied from platform_sdl.jai
