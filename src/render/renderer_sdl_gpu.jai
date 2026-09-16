@@ -22,17 +22,6 @@ sdl_gpu_renderer_make :: (window: *Window) -> Gpu_Renderer_Data, bool
         return .{}, false;
     }
 
-    sampler_create_info := SDL_GPUSamplerCreateInfo.{
-        min_filter = .NEAREST,
-        mag_filter = .NEAREST,
-        mipmap_mode = .NEAREST,
-        address_mode_u = .CLAMP_TO_EDGE,
-        address_mode_v = .CLAMP_TO_EDGE,
-        address_mode_w = .CLAMP_TO_EDGE,
-    };
-    sampler := SDL_CreateGPUSampler(device, *sampler_create_info);
-    assert(sampler != null, "Couldn't create sampler: %", SDL_GetErrorString());
-
     mesh, ok := mesh_create_and_upload(device, VERTICES, INDICES);
     if !ok {
         log_error("Couldn't create mesh: %", SDL_GetErrorString());
@@ -42,7 +31,6 @@ sdl_gpu_renderer_make :: (window: *Window) -> Gpu_Renderer_Data, bool
     data: Gpu_Renderer_Data;
     data.device = device;
     data.pipeline = pipeline;
-    data.sampler = sampler;
     data.mesh = mesh;
     return data, true;
 }
@@ -51,7 +39,6 @@ sdl_gpu_renderer_drop :: (window: *Window, data: *Gpu_Renderer_Data)
 {
     sdl_window := convert_to_sdl_window(window);
     mesh_drop(data, *data.mesh);
-    SDL_ReleaseGPUSampler(data.device, data.sampler);
     SDL_ReleaseGPUGraphicsPipeline(data.device, data.pipeline);
     SDL_ReleaseWindowFromGPUDevice(data.device, sdl_window);
     SDL_DestroyGPUDevice(data.device);
@@ -86,16 +73,15 @@ sdl_gpu_renderer_draw :: (window: *Window, data: *Gpu_Renderer_Data)
         ];
         index_buffer := SDL_GPUBufferBinding.{ buffer = data.mesh.index_buffer, offset = 0 };
 
-        // @FIXME: Revert
-        // texture_sampler := SDL_GPUTextureSamplerBinding.{
-        //     texture = data.mesh.texture,
-        //     sampler = data.sampler,
-        // };
+        texture_sampler := SDL_GPUTextureSamplerBinding.{
+            texture = data.mesh.texture,
+            sampler = data.mesh.sampler,
+        };
 
         SDL_BindGPUGraphicsPipeline(render_pass, data.pipeline);
         SDL_BindGPUVertexBuffers(render_pass, 0, vertex_buffers.data, vertex_buffers.count);
         SDL_BindGPUIndexBuffer(render_pass, *index_buffer, SDL_GPUIndexElementSize._32BIT);
-        // SDL_BindGPUFragmentSamplers(render_pass, 0, *texture_sampler, 1);
+        SDL_BindGPUFragmentSamplers(render_pass, 0, *texture_sampler, 1);
         SDL_DrawGPUIndexedPrimitives(render_pass, INDICES.count, 1, 0, 0, 0);
 
         SDL_EndGPURenderPass(render_pass);
@@ -174,8 +160,7 @@ load_shader :: (device: *SDL_GPUDevice, path: string, num_samplers: u32 = 0) -> 
     shader_info.entrypoint = entrypoint;
     shader_info.format = format;
     shader_info.stage = stage;
-    // @FIXME: Revert
-    // shader_info.num_samplers = num_samplers;
+    shader_info.num_samplers = num_samplers;
 
     return SDL_CreateGPUShader(device, *shader_info);
 }
@@ -313,6 +298,17 @@ mesh_create_and_upload :: (device: *SDL_GPUDevice, vertices: []Vertex, indices: 
 
     SDL_UnmapGPUTransferBuffer(device, texture_transfer_buffer);
 
+    sampler_create_info := SDL_GPUSamplerCreateInfo.{
+        min_filter = .NEAREST,
+        mag_filter = .NEAREST,
+        mipmap_mode = .NEAREST,
+        address_mode_u = .CLAMP_TO_EDGE,
+        address_mode_v = .CLAMP_TO_EDGE,
+        address_mode_w = .CLAMP_TO_EDGE,
+    };
+    sampler := SDL_CreateGPUSampler(device, *sampler_create_info);
+    assert(sampler != null, "Couldn't create sampler: %", SDL_GetErrorString());
+
     upload_cmd_buf := SDL_AcquireGPUCommandBuffer(device);
     assert(upload_cmd_buf != null, "Couldn't acquire GPU command buffer: %", SDL_GetErrorString());
 
@@ -373,7 +369,8 @@ mesh_create_and_upload :: (device: *SDL_GPUDevice, vertices: []Vertex, indices: 
     m: Gpu_Mesh;
     m.vertex_buffer = vertex_buffer;
     m.index_buffer  = index_buffer;
-    m.textures = textures;
+    m.sampler = sampler;
+    m.texture = texture;
     return m, true;
 }
 
@@ -381,13 +378,8 @@ mesh_drop :: (renderer: *Gpu_Renderer_Data, m: *Gpu_Mesh)
 {
     SDL_ReleaseGPUBuffer(renderer.device, m.vertex_buffer);
     SDL_ReleaseGPUBuffer(renderer.device, m.index_buffer);
-
-    for m.textures {
-        tex := get_texture(renderer, it);
-        if tex {
-            SDL_ReleaseGPUTexture(renderer.device, tex);
-        }
-    }
+    SDL_ReleaseGPUSampler(renderer.device, m.sampler);
+    SDL_ReleaseGPUTexture(renderer.device, m.texture);
 }
 
 
@@ -404,6 +396,9 @@ Gpu_Mesh :: struct {
     vertex_buffer: *SDL_GPUBuffer;
     // vertex_attributes: [field_count(Vertex)]SDL_GPUVertexAttribute;
     index_buffer: *SDL_GPUBuffer;
+
+    sampler: *SDL_GPUSampler;
+    texture: *SDL_GPUTexture;
 }
 
 Gpu_Texture :: struct {

@@ -113,7 +113,8 @@ Texture_Handle :: #type,distinct Handle(Texture);
 Mesh_Data :: struct {
     vertices: []Vertex;
     indices:  []u32;
-    textures: []Texture_Handle; // @TODO: Replace with handle-based container
+    // @FIXME: Not even sure we need this one right now
+    // textures: []Texture_Handle; // @TODO: Replace with handle-based container
 }
 
 Vertex :: struct {
