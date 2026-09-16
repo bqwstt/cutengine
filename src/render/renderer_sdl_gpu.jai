@@ -48,67 +48,13 @@ sdl_gpu_renderer_drop :: (window: *Window, data: *Gpu_Renderer_Data)
 
 sdl_gpu_renderer_draw :: (window: *Window, data: *Gpu_Renderer_Data)
 {
-    sdl_window := convert_to_sdl_window(window);
-
     dt += 0.01;
 
-    // Create command buffer for batching requests to the GPU
-    cmd := SDL_AcquireGPUCommandBuffer(data.device);
-    assert(cmd != null, "Couldn't acquire GPU command buffer: %", SDL_GetErrorString());
-
-    // Create a swapchain texture to draw in between frames
-    swapchain_texture: *SDL_GPUTexture;
-    ok := SDL_WaitAndAcquireGPUSwapchainTexture(cmd, sdl_window, *swapchain_texture, null, null); 
-    assert(ok, "Couldn't acquire swapchain texture: %", SDL_GetErrorString());
-
-    // Check needed: the swapchain texture can be null in certain cases, i.e. the window is minimized.
-    if swapchain_texture {
-        cti: SDL_GPUColorTargetInfo;
-        cti.texture = swapchain_texture;
-        cti.clear_color = SDL_FColor.{ 0.0, 0.0, 0.0, 1.0 };
-        cti.load_op = .CLEAR;
-        cti.store_op = .STORE;
-
-        // Render pass: bind pipeline, vertex buffers and draw primitives
-        render_pass := SDL_BeginGPURenderPass(cmd, *cti, 1, null);
-
-        vertex_buffers := SDL_GPUBufferBinding.[
-            .{ buffer = data.mesh.vertex_buffer, offset = 0 }
-        ];
-        index_buffer := SDL_GPUBufferBinding.{ buffer = data.mesh.index_buffer, offset = 0 };
-
-        texture_sampler := SDL_GPUTextureSamplerBinding.{
-            texture = data.mesh.texture,
-            sampler = data.mesh.sampler,
-        };
-
-        rot: Quaternion;
-        set_from_axis_and_angle(*rot, 0, 0, 1, dt);
-
-        matrix_uniform: Matrix_Uniform;
-        scale(*matrix_uniform.model, 0.1);
-        translate(*matrix_uniform.model, .{ 6, -6, 0.0 });
-        matrix_uniform.model = rotate(matrix_uniform.model, rot);
-        transpose(*matrix_uniform.model);
-
-        SDL_BindGPUGraphicsPipeline(render_pass, data.pipeline);
-        SDL_BindGPUVertexBuffers(render_pass, 0, vertex_buffers.data, vertex_buffers.count);
-        SDL_BindGPUIndexBuffer(render_pass, *index_buffer, SDL_GPUIndexElementSize._32BIT);
-        SDL_BindGPUFragmentSamplers(render_pass, 0, *texture_sampler, 1);
-        SDL_PushGPUVertexUniformData(cmd, 0, *matrix_uniform, size_of(Matrix_Uniform));
-        SDL_DrawGPUIndexedPrimitives(render_pass, INDICES.count, 1, 0, 0, 0);
-
-        // Matrix4x4 matrixUniform = Matrix4x4_Multiply(
-		// 	Matrix4x4_CreateRotationZ(t),
-		// 	Matrix4x4_CreateTranslation(-0.5f, -0.5f, 0)
-		// );
-
-        SDL_EndGPURenderPass(render_pass);
+    frame, ok := renderer_begin_frame(window, data);
+    if ok {
+        renderer_draw_mesh(*frame, data);
+        renderer_end_frame(*frame);
     }
-
-    // Send commands to the GPU
-    ok = SDL_SubmitGPUCommandBuffer(cmd);
-    assert(ok, "Couldn't submit command buffer to GPU: %", SDL_GetErrorString());
 }
 
 Gpu_Renderer_Data :: struct {
@@ -118,9 +64,73 @@ Gpu_Renderer_Data :: struct {
     mesh: Gpu_Mesh;
 }
 
-// #region Shaders
-
 #scope_file
+
+// #region Renderer Frames
+
+renderer_begin_frame :: (window: *Window, data: *Gpu_Renderer_Data) -> Renderer_Frame, bool
+{
+    frame: Renderer_Frame;
+
+    // Create command buffer for batching requests to the GPU
+    frame.command_buffer = SDL_AcquireGPUCommandBuffer(data.device);
+    assert(frame.command_buffer != null, "Couldn't acquire GPU command buffer: %", SDL_GetErrorString());
+
+    // Create a swapchain texture to draw in between frames
+    swapchain_texture: *SDL_GPUTexture;
+    ok := SDL_WaitAndAcquireGPUSwapchainTexture(
+        frame.command_buffer,
+        convert_to_sdl_window(window),
+        *swapchain_texture,
+        *frame.width, *frame.height); 
+    assert(ok, "Couldn't acquire swapchain texture: %", SDL_GetErrorString());
+
+    // The swapchain texture can be null in certain cases, i.e. the window is minimized.
+    if !swapchain_texture  return frame, false;
+
+    cti: SDL_GPUColorTargetInfo;
+    cti.texture = swapchain_texture;
+    cti.clear_color = SDL_FColor.{ 0.0, 0.0, 0.0, 1.0 };
+    cti.load_op = .CLEAR;
+    cti.store_op = .STORE;
+
+    frame.pass = SDL_BeginGPURenderPass(frame.command_buffer, *cti, 1, null);
+    SDL_BindGPUGraphicsPipeline(frame.pass, data.pipeline);
+    return frame, true;
+}
+
+renderer_draw_mesh :: (frame: *Renderer_Frame, data: *Gpu_Renderer_Data)
+{
+    vertex_binding  := SDL_GPUBufferBinding.{ buffer = data.mesh.vertex_buffer, offset = 0 };
+    index_binding   := SDL_GPUBufferBinding.{ buffer = data.mesh.index_buffer, offset = 0 };
+    sampler_binding := SDL_GPUTextureSamplerBinding.{ texture = data.mesh.texture, sampler = data.mesh.sampler, };
+
+    // @FIXME: Test code, remove.
+    rot: Quaternion;
+    set_from_axis_and_angle(*rot, 0, 0, 1, dt);
+
+    matrix_uniform: Matrix4 = Matrix4_Identity;
+    matrix_uniform = scale(matrix_uniform, 0.1); // Scale
+    matrix_uniform = translate(matrix_uniform, Vector3.{ 5, -5, 0 });
+    matrix_uniform = rotate(matrix_uniform, rot);
+
+    SDL_BindGPUVertexBuffers(frame.pass, 0, *vertex_binding, 1);
+    SDL_BindGPUIndexBuffer(frame.pass, *index_binding, SDL_GPUIndexElementSize._32BIT);
+    SDL_BindGPUFragmentSamplers(frame.pass, 0, *sampler_binding, 1);
+    SDL_PushGPUVertexUniformData(frame.command_buffer, 0, *matrix_uniform, size_of(Matrix4));
+    SDL_DrawGPUIndexedPrimitives(frame.pass, INDICES.count, 1, 0, 0, 0);
+}
+
+renderer_end_frame :: (frame: *Renderer_Frame)
+{
+    if frame.pass  SDL_EndGPURenderPass(frame.pass);
+
+    // Send commands to the GPU
+    ok := SDL_SubmitGPUCommandBuffer(frame.command_buffer);
+    assert(ok, "Couldn't submit command buffer to GPU: %", SDL_GetErrorString());
+}
+
+// #region Shaders
 
 /// @TODO: This can be done at compile time, probably
 load_shader :: (device: *SDL_GPUDevice, path: string, num_samplers: u32 = 0) -> *SDL_GPUShader
@@ -405,6 +415,14 @@ convert_to_sdl_window :: (w: *Window) -> *SDL_Window
     return cast(*SDL_Window) w.native;
 }
 
+Renderer_Frame :: struct {
+    command_buffer: *SDL_GPUCommandBuffer;
+    pass:           *SDL_GPURenderPass;
+    width:          u32;
+    height:         u32;
+    view_proj:      Matrix4;
+}
+
 Gpu_Mesh :: struct {
     using #as m: Mesh_Data;
 
@@ -418,12 +436,6 @@ Gpu_Mesh :: struct {
 
 Gpu_Texture :: struct {
     handle: *SDL_GPUTexture;
-}
-
-Matrix_Uniform :: struct {
-    model: Matrix4 = Matrix4_Identity;
-    view: Matrix4 = Matrix4_Identity;
-    projection: Matrix4 = Matrix4_Identity;
 }
 
 VERTICES :: Vertex.[
