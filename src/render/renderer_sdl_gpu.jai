@@ -99,6 +99,8 @@ renderer_begin_frame :: (window: *Window, data: *Gpu_Renderer_Data) -> Renderer_
     return frame, true;
 }
 
+z: float = -1.0;
+
 renderer_draw_mesh :: (frame: *Renderer_Frame, data: *Gpu_Renderer_Data)
 {
     vertex_binding  := SDL_GPUBufferBinding.{ buffer = data.mesh.vertex_buffer, offset = 0 };
@@ -109,10 +111,16 @@ renderer_draw_mesh :: (frame: *Renderer_Frame, data: *Gpu_Renderer_Data)
     rot: Quaternion;
     set_from_axis_and_angle(*rot, 0, 0, 1, dt);
 
-    matrix_uniform: Matrix4 = Matrix4_Identity;
-    matrix_uniform = scale(matrix_uniform, 0.1); // Scale
-    matrix_uniform = translate(matrix_uniform, Vector3.{ 5, -5, 0 });
-    matrix_uniform = rotate(matrix_uniform, rot);
+    z -= 0.001;
+
+    FOV :: 90;
+    aspect_ratio := frame.width / cast(float) frame.height;
+    projection_matrix := make_projection_matrix(FOV * PI / 180.0, aspect_ratio, 0.1, 1000.0);
+    view_matrix := 
+        make_translation_matrix4(Vector3.{ 0, 0, z })
+        * make_scale_matrix4(Vector3.{ 2.0, 0.5, 0.0 });
+
+    matrix_uniform := projection_matrix * view_matrix;
 
     SDL_BindGPUVertexBuffers(frame.pass, 0, *vertex_binding, 1);
     SDL_BindGPUIndexBuffer(frame.pass, *index_binding, SDL_GPUIndexElementSize._32BIT);
