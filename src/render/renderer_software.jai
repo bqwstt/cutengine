@@ -32,17 +32,17 @@ framebuffer_draw_model :: (fb: Framebuffer, camera: Camera, model: Model, color:
     }
 }
 
-software_renderer_make :: (window: *SDL_Window, width: s32, height: s32) -> Software_Renderer_Data, bool
+software_renderer_make :: (window: *Window, width: s32, height: s32) -> Software_Renderer_Data, bool
 {
+    // @FIXME: Not sure if I like these things.
+    // Right now this depends on SDL, where it really shouldn't.
+    surface := SDL_GetWindowSurface(convert_to_sdl_window(window));
+    defer SDL_DestroySurface(surface);
+
     // Create internal SDL renderer and texture to draw to
-    sdl_renderer := SDL_CreateRenderer(window, null);
+    sdl_renderer := SDL_CreateSoftwareRenderer(surface);
     if !sdl_renderer {
         log_error("Couldn't create SDL renderer: %", SDL_GetErrorString());
-        return .{}, false;
-    }
-
-    if !SDL_SetRenderVSync(sdl_renderer, 1) {
-        log_error("Couldn't set renderer VSync: %", SDL_GetErrorString());
         return .{}, false;
     }
 
@@ -165,6 +165,11 @@ draw_projected_triangle :: (fb: Framebuffer, camera: Camera, triangle: Triangle,
     draw_projected_line(fb, camera, a_b, color);
     draw_projected_line(fb, camera, b_c, color);
     draw_projected_line(fb, camera, c_a, color);
+}
+
+convert_to_sdl_window :: (w: *Window) -> *SDL_Window
+{
+    return cast(*SDL_Window) w.native;
 }
 
 #import "Math";

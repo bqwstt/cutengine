@@ -6,12 +6,10 @@ renderer_init :: (window: *Window, backend: Backend_Kind, width: s32, height: s3
 
     if #complete backend == {
     case .SOFTWARE;
-    /* @FIXME: Removed until this works.
         data, ok := software_renderer_make(window, width, height);
         if !ok  return .{}, false;
 
         ren.software_data = data;
-    */
     case .GPU;
         data, ok := sdl_gpu_renderer_make(window);
         if !ok  return .{}, false;
@@ -26,9 +24,7 @@ renderer_drop :: (using ren: *Renderer)
 {
     if #complete backend == {
     case .SOFTWARE;
-    /* @FIXME: Removed until this works.
         software_renderer_drop(*software_data);
-    */
     case .GPU;
         sdl_gpu_renderer_drop(window, *gpu_data);
     }
@@ -40,9 +36,7 @@ renderer_draw :: (using ren: *Renderer)
 {
     if #complete backend == {
     case .SOFTWARE;
-    /* @FIXME: Removed until this works.
         software_renderer_draw(*software_data);
-    */
     case .GPU;
         sdl_gpu_renderer_draw(window, *gpu_data);
     }
