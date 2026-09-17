@@ -52,6 +52,7 @@ Input :: struct {
 ///    This is anything that the game _constructs_ and _uses_ in-between frames, but may not be needed later. For example, a model, a particle effect.
 /// 3. Temporary: we want to store stuff that will live *for the duration of a single frame*.
 ///    This is anything that the game _temporarily constructs_ and immediately _discards_ after some work is done. For example, populating a vertex array.
+///    NOTE: Temporary is provided by the runtime in Temporary_Storage, so no need to add it to this struct.
 ///
 ///         Lifetime of the game          L = Launch
 /// |=================================|   C = Close

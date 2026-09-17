@@ -10,17 +10,19 @@ engine_logger :: (message: string, data: *void, info: Log_Info)
     write_strings(prefix, message, newline, to_standard_error = (info.common_flags & .ERROR) != 0);
 }
 
-// Static memory to use throughout the program.
-#add_context memory: *Memory;
+// Add allocators to the context to use globally.
+#add_context permanent_allocator: Allocator;
+#add_context transient_allocator: Allocator;
 
 main :: ()
 {
     // Create static memory for the whole program.
     memory := memory_make(PERMANENT_MEMORY_SIZE, TRANSIENT_MEMORY_SIZE);
 
-    context.memory = *memory;
     context.logger = engine_logger;
-    context.allocator = permanent_allocator(*memory); // Use permanent allocation for initialization
+    context.permanent_allocator = permanent_allocator(*memory);
+    context.transient_allocator = transient_allocator(*memory);
+    context.allocator = context.permanent_allocator; // Use permanent allocation for initialization
 
     window, window_ok := platform_init("cutty", WINDOW_WIDTH, WINDOW_HEIGHT);
     if !window_ok  return;
@@ -33,7 +35,7 @@ main :: ()
     // Use trap allocator from now on, no more accidental allocations after this!
     // (Any alloc will now need to pass in either `,,permament_allocator` or `,,transient_allocator`.)
     context.allocator = .{ trap_allocator_proc, null };
-    defer context.allocator = permanent_allocator(*memory); // If, for some reason, some shutdown code allocates, revert it before they run.
+    defer context.allocator = context.permanent_allocator; // If, for some reason, some shutdown code allocates, revert it before they run.
 
     ts := cast(*Temporary_Storage_Paged_Alloc) context.temporary_storage;
     oa := ts.overflow_allocator;
@@ -52,6 +54,9 @@ main :: ()
         renderer_draw(*renderer);
         reset_temporary_storage();
     }
+
+    // @TODO: Not sure if this makes sense, as we're only using arenas, but just in case.
+    #if DEBUG report_memory_leaks();
 }
 
 // @TODO: Change these, make them modifiable and query during runtime.
