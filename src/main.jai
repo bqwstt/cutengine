@@ -10,21 +10,35 @@ engine_logger :: (message: string, data: *void, info: Log_Info)
     write_strings(prefix, message, newline, to_standard_error = (info.common_flags & .ERROR) != 0);
 }
 
+// Static memory to use throughout the program.
+#add_context memory: *Memory;
+
 main :: ()
 {
+    // Create static memory for the whole program.
+    memory := memory_make(PERMANENT_MEMORY_SIZE, TRANSIENT_MEMORY_SIZE);
+
+    context.memory = *memory;
     context.logger = engine_logger;
+    context.allocator = permanent_allocator(*memory); // Use permanent allocation for initialization
 
     window, window_ok := platform_init("cutty", WINDOW_WIDTH, WINDOW_HEIGHT);
     if !window_ok  return;
     defer platform_shutdown(*window);
 
-    memory, memory_ok := engine_memory_make(PERMANENT_MEMORY_SIZE, TRANSIENT_MEMORY_SIZE);
-    // @FIXME: Skip check for now
-    // if !memory_ok  return;
-
     renderer, renderer_ok := renderer_init(*window, .GPU, WINDOW_WIDTH, WINDOW_HEIGHT);
     if !renderer_ok  return;
     defer renderer_drop(*renderer);
+
+    // Use trap allocator from now on, no more accidental allocations after this!
+    // (Any alloc will now need to pass in either `,,permament_allocator` or `,,transient_allocator`.)
+    context.allocator = .{ trap_allocator_proc, null };
+    defer context.allocator = permanent_allocator(*memory); // If, for some reason, some shutdown code allocates, revert it before they run.
+
+    ts := cast(*Temporary_Storage_Paged_Alloc) context.temporary_storage;
+    oa := ts.overflow_allocator;
+    ts.overflow_allocator = .{ trap_allocator_proc, null };
+    defer ts.overflow_allocator = oa;
 
     input: Input;
     last_time := platform_time_ns();
@@ -44,8 +58,12 @@ main :: ()
 WINDOW_WIDTH  :: 1920;
 WINDOW_HEIGHT :: 1080;
 
-PERMANENT_MEMORY_SIZE :: 256 * 1024 * 1024;
-TRANSIENT_MEMORY_SIZE :: 512 * 1024 * 1024;
+KiB :: 1024;
+MiB :: 1024 * KiB;
+GiB :: 1024 * MiB;
+
+PERMANENT_MEMORY_SIZE :: 64 * MiB;
+TRANSIENT_MEMORY_SIZE ::  4 * GiB;
 
 #load "platform/platform.jai";
 #load "platform/platform_sdl.jai"; // @FIXME: Load depending on platform wanted
@@ -53,5 +71,4 @@ TRANSIENT_MEMORY_SIZE :: 512 * 1024 * 1024;
 #load "engine/model.jai";
 #load "render/renderer.jai";
 
-#import "Basic";
-#import "SDL3";
+#import "Basic"()(MEMORY_DEBUGGER = DEBUG); // Enable memory debugger on debug buids.
