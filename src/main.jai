@@ -45,23 +45,21 @@ main :: ()
     input: Input;
     last_time := platform_time_ns();
 
+    camera := camera_make();
+
     while !input.quit_requested {
         now := platform_time_ns();
         input.dt = (now - last_time) / 1_000_000_000.0;
         last_time = now;
 
         platform_poll_events(*window, *input);
-        renderer_draw(*renderer);
+        renderer_draw(*renderer, *camera);
         reset_temporary_storage();
     }
 
     // @TODO: Not sure if this makes sense, as we're only using arenas, but just in case.
     #if DEBUG report_memory_leaks();
 }
-
-// @TODO: Change these, make them modifiable and query during runtime.
-WINDOW_WIDTH  :: 1920;
-WINDOW_HEIGHT :: 1080;
 
 KiB :: 1024;
 MiB :: 1024 * KiB;

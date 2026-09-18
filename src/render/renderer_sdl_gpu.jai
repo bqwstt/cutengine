@@ -46,11 +46,11 @@ sdl_gpu_renderer_drop :: (window: *Window, data: *Gpu_Renderer_Data)
     SDL_DestroyGPUDevice(data.device);
 }
 
-sdl_gpu_renderer_draw :: (window: *Window, data: *Gpu_Renderer_Data)
+sdl_gpu_renderer_draw :: (window: *Window, data: *Gpu_Renderer_Data, camera: *Camera)
 {
     frame, ok := renderer_begin_frame(window, data);
     if ok {
-        renderer_draw_mesh(*frame, data);
+        renderer_draw_mesh(*frame, data, camera);
         renderer_end_frame(*frame);
     }
 }
@@ -97,9 +97,9 @@ renderer_begin_frame :: (window: *Window, data: *Gpu_Renderer_Data) -> Renderer_
     return frame, true;
 }
 
-z: float = 1.0;
+z: float = 0.001;
 
-renderer_draw_mesh :: (frame: *Renderer_Frame, data: *Gpu_Renderer_Data)
+renderer_draw_mesh :: (frame: *Renderer_Frame, data: *Gpu_Renderer_Data, camera: *Camera)
 {
     vertex_binding  := SDL_GPUBufferBinding.{ buffer = data.mesh.vertex_buffer, offset = 0 };
     index_binding   := SDL_GPUBufferBinding.{ buffer = data.mesh.index_buffer, offset = 0 };
@@ -110,21 +110,13 @@ renderer_draw_mesh :: (frame: *Renderer_Frame, data: *Gpu_Renderer_Data)
     set_from_axis_and_angle(*rot, 1, 1, 1, dt);
 
     dt -= 0.01;
-    z += 0.001;
+    z += 0.00001;
 
     model_matrix := make_translation_matrix4(Vector3.{ 0, 0, 0 }) * make_scale_matrix4(Vector3.{ 0.5, 0.5, 1.0 });
     model_matrix = rotate(model_matrix, rot);
 
-    camera_matrix := make_translation_matrix4(Vector3.{ 0, 0, z });
-    success, view_matrix := inverse(camera_matrix);
-    if !success {
-        log_error("Couldn't inverse view matrix!");
-    }
-
-    FOV :: 90;
-    aspect_ratio := frame.width / cast(float) frame.height;
-    projection_matrix := make_projection_matrix(FOV * PI / 180.0, aspect_ratio, 0.1, 1000.0, depth_range_01 = true);
-    view_projection_matrix := projection_matrix * view_matrix;
+    camera_move(camera, .{ 0, 0, z });
+    view_projection_matrix := camera.projection_matrix * camera.view_matrix;
 
     SDL_BindGPUVertexBuffers(frame.pass, 0, *vertex_binding, 1);
     SDL_BindGPUIndexBuffer(frame.pass, *index_binding, SDL_GPUIndexElementSize._32BIT);

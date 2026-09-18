@@ -32,13 +32,13 @@ renderer_drop :: (using ren: *Renderer)
     ren.* = .{};
 }
 
-renderer_draw :: (using ren: *Renderer)
+renderer_draw :: (using ren: *Renderer, camera: *Camera)
 {
     if #complete backend == {
     case .SOFTWARE;
         software_renderer_draw(*software_data);
     case .GPU;
-        sdl_gpu_renderer_draw(window, *gpu_data);
+        sdl_gpu_renderer_draw(window, *gpu_data, camera);
     }
 }
 
