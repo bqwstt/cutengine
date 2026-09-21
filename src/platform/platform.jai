@@ -46,6 +46,40 @@ Input :: struct {
     dt: float64;
 
     quit_requested: bool;
+    keyboard_buttons_pressed: Ring_Buffer(Keyboard_Button);
+}
+
+Keyboard_Key :: enum u8 {
+    Q; W; E; R; T; Y; U; I; O; P;
+    A; S; D; F; G; H; J; K; L;
+    Z; X; C; V; B; N; M;
+
+    NUM_1; NUM_2; NUM_3; NUM_4; NUM_5;
+    NUM_6; NUM_7; NUM_8; NUM_9; NUM_0;
+
+    LEFT_ARROW; RIGHT_ARROW;
+    UP_ARROW; DOWN_ARROW;
+
+    MINUS; EQUALS;
+    LEFT_BRACKET; RIGHT_BRACKET; BACKSLASH;
+    SEMICOLON; TICK;
+    COMMA; DOT; SLASH;
+    BACKTICK;
+
+    RETURN;
+    DELETE;
+}
+
+Keyboard_Modifier :: enum u8 {
+    SHIFT;
+    CTRL_OR_CMD;
+    ALT_OR_OPTION;
+}
+
+Keyboard_Button :: struct {
+    qwerty_key: Keyboard_Key;
+    real_key: Keyboard_Key;
+    modifiers: [2]Keyboard_Modifier;
 }
 
 /// How memory works
@@ -81,6 +115,11 @@ Input :: struct {
 Memory :: struct {
     permanent: Flat_Pool;
     transient: Flat_Pool;
+}
+
+// @FIXME: Move to utils... and implement!
+Ring_Buffer :: struct($T: Type) {
+
 }
 
 #import "Flat_Pool";
