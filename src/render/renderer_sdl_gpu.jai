@@ -18,6 +18,8 @@ sdl_gpu_renderer_make :: (window: *Window) -> Gpu_Renderer_Data, bool
     device_window_ok := SDL_ClaimWindowForGPUDevice(device, sdl_window);
     assert(device_window_ok, "Couldn't claim window for GPU device: %", SDL_GetErrorString());
 
+    SDL_SetGPUSwapchainParameters(device, sdl_window, .SDR, .VSYNC);
+
     pipeline := create_pipeline(sdl_window, device);
     if !pipeline {
         log_error("Couldn't create graphics pipeline: %", SDL_GetErrorString());

@@ -22,6 +22,13 @@ trap_allocator_proc :: (mode: Allocator_Mode, size: s64, old_size: s64, old: *vo
     return null;
 }
 
+/// Shared between all platforms.
+/// This could be implemented by each platform separately, but for now, using Jai's clock is fine.
+platform_time_ns :: () -> u64
+{
+    return cast(u64) to_nanoseconds(current_time_monotonic());
+}
+
 Native_Window :: struct {} // Opaque on purpose
 
 Window :: struct {

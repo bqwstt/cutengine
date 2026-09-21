@@ -47,11 +47,6 @@ platform_poll_events :: (window: *Window, input: *Input)
 	}
 }
 
-platform_time_ns :: () -> u64
-{
-    return SDL_GetTicksNS();
-}
-
 #scope_file
 
 convert_to_sdl_window :: (w: *Window) -> *SDL_Window

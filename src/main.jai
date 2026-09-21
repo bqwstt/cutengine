@@ -14,6 +14,9 @@ engine_logger :: (message: string, data: *void, info: Log_Info)
 #add_context permanent_allocator: Allocator;
 #add_context transient_allocator: Allocator;
 
+FPS :: 60.0;
+DELTA_WANTED :: 1.0 / FPS;
+
 main :: ()
 {
     // Create static memory for the whole program.
@@ -43,22 +46,59 @@ main :: ()
     defer ts.overflow_allocator = oa;
 
     input: Input;
-    last_time := platform_time_ns();
+    input.dt = DELTA_WANTED;
 
-    camera := camera_make();
+    // Store current game state and previous game state for later interpolation.
+    game_state: Game_State;
+    game_state.camera = camera_make();
 
+    prev_game_state: Game_State;
+    prev_game_state.camera = camera_make();
+
+    prev_time := platform_time_ns();
+    frame_acc: float64;
+
+    // Main loop
     while !input.quit_requested {
-        now := platform_time_ns();
-        input.dt = (now - last_time) / 1_000_000_000.0;
-        last_time = now;
+        new_time := platform_time_ns();
+        frame_time := cast(float64) (new_time - prev_time) / 1_000_000_000.0;
+        frame_time = min(frame_time, 0.25);
+        prev_time = new_time;
 
         platform_poll_events(*window, *input);
-        renderer_draw(*renderer, *camera);
+
+        frame_acc += frame_time;
+        ticks := cast(int) floor(frame_acc / DELTA_WANTED);
+        frame_acc -= cast(float64) ticks * DELTA_WANTED;
+
+        for i: 1 .. ticks {
+            // Copy game state to prev state
+            // TODO
+
+            // Game update
+            // TODO
+        }
+
+        alpha := frame_acc / DELTA_WANTED;
+        game_draw(*renderer, *prev_game_state, *game_state, alpha);
         reset_temporary_storage();
     }
 
     // @TODO: Not sure if this makes sense, as we're only using arenas, but just in case.
     #if DEBUG report_memory_leaks();
+}
+
+Game_State :: struct {
+    camera: Camera;
+}
+
+// @FIXME, @REFACTOR:
+// We probably want to remove the interpolation from `prev_state` to `state` and instead
+// interpolate each individual entity later. Think this through later.
+game_draw :: (ren: *Renderer, prev_state: *Game_State, curr_state: *Game_State, alpha: float64)
+{
+    // @TODO: Lerp whatever is needed here.
+    renderer_draw(ren, *curr_state.camera);
 }
 
 KiB :: 1024;
