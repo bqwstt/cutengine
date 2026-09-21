@@ -49,10 +49,10 @@ main :: ()
     input.dt = DELTA_WANTED;
 
     // Store current game state and previous game state for later interpolation.
-    game_state: Game_State;
+    game_state := New(Game_State,, context.permanent_allocator);
     game_state.camera = camera_make();
 
-    prev_game_state: Game_State;
+    prev_game_state := New(Game_State,, context.permanent_allocator);
     prev_game_state.camera = camera_make();
 
     prev_time := platform_time_ns();
@@ -73,14 +73,14 @@ main :: ()
 
         for i: 1 .. ticks {
             // Copy game state to prev state
-            // TODO
+            prev_game_state.* = game_state.*;
 
             // Game update
             // TODO
         }
 
         alpha := frame_acc / DELTA_WANTED;
-        game_draw(*renderer, *prev_game_state, *game_state, alpha);
+        game_draw(*renderer, prev_game_state, game_state, alpha);
         reset_temporary_storage();
     }
 
