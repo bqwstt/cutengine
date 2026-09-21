@@ -72,11 +72,10 @@ main :: ()
         frame_acc -= cast(float64) ticks * DELTA_WANTED;
 
         for i: 1 .. ticks {
-            // Copy game state to prev state
+            // Copy state and update game
+            // Note that the game runs on a fixed delta
             prev_game_state.* = game_state.*;
-
-            // Game update
-            // TODO
+            game_update(game_state, *input, DELTA_WANTED);
         }
 
         alpha := frame_acc / DELTA_WANTED;
@@ -86,19 +85,6 @@ main :: ()
 
     // @TODO: Not sure if this makes sense, as we're only using arenas, but just in case.
     #if DEBUG report_memory_leaks();
-}
-
-Game_State :: struct {
-    camera: Camera;
-}
-
-// @FIXME, @REFACTOR:
-// We probably want to remove the interpolation from `prev_state` to `state` and instead
-// interpolate each individual entity later. Think this through later.
-game_draw :: (ren: *Renderer, prev_state: *Game_State, curr_state: *Game_State, alpha: float64)
-{
-    // @TODO: Lerp whatever is needed here.
-    renderer_draw(ren, *curr_state.camera);
 }
 
 KiB :: 1024;
@@ -113,5 +99,6 @@ TRANSIENT_MEMORY_SIZE ::  4 * GiB;
 #load "engine/scene.jai";
 #load "engine/model.jai";
 #load "render/renderer.jai";
+#load "game/game.jai";
 
 #import "Basic"()(MEMORY_DEBUGGER = DEBUG); // Enable memory debugger on debug buids.
