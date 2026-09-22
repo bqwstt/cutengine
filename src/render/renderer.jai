@@ -42,6 +42,22 @@ renderer_draw :: (using ren: *Renderer, camera: *Camera)
     }
 }
 
+renderer_execute_commands :: (using ren: *Renderer, list: *Render_List)
+{
+    if #complete backend == {
+    case .SOFTWARE;
+        /* ... */
+    case .GPU;
+        sdl_gpu_renderer_execute_commands(window, *gpu_data, list);
+    }
+}
+
+render_list_init :: (list: *Render_List, clear_color: Vector4)
+{
+    list.clear_color = clear_color;
+    array_free(list.commands);
+}
+
 Backend_Kind :: enum u32 {
     GPU :: 0;
     SOFTWARE :: 1;
@@ -55,6 +71,29 @@ Renderer :: struct {
         .SOFTWARE ,, software_data: Software_Renderer_Data;
         .GPU      ,, gpu_data: Gpu_Renderer_Data;
     }
+}
+
+Render_Command_Kind :: enum u32 {
+    DRAW_INDEXED;
+}
+
+Render_Command :: struct {
+    using data: Command_Data;
+    Command_Data :: union kind: Render_Command_Kind {
+        .DRAW_INDEXED ,, draw_indexed: Draw_Indexed_Render_Command;
+    }
+}
+
+Render_List :: struct {
+    clear_color: Vector4;
+
+    // @TODO: Convert to small array or similar?
+    commands: [..]Render_Command;
+}
+
+Draw_Indexed_Render_Command :: struct {
+    mesh: Mesh_Handle;
+    texture: Texture_Handle;
 }
 
 #load "renderer_software.jai";

@@ -79,7 +79,11 @@ main :: ()
         }
 
         alpha := frame_acc / DELTA_WANTED;
-        game_draw(*renderer, prev_game_state, game_state, alpha);
+
+        // Build render commands list and execute using the current renderer
+        render_list := game_build_render_list(prev_game_state, game_state, alpha);
+        renderer_execute_commands(*renderer, *render_list);
+
         reset_temporary_storage();
     }
 

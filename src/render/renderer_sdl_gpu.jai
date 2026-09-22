@@ -60,6 +60,20 @@ sdl_gpu_renderer_draw :: (window: *Window, data: *Gpu_Renderer_Data, camera: *Ca
     }
 }
 
+sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data, list: *Render_List)
+{
+    frame, ok := renderer_begin_frame(window, data, list.clear_color);
+    if ok {
+        for command: list.commands {
+            if #complete command.kind == {
+            case .DRAW_INDEXED;
+                // @TODO
+            }
+        }
+    }
+    renderer_end_frame(*frame);
+}
+
 Gpu_Renderer_Data :: struct {
     device: *SDL_GPUDevice;
     pipeline: *SDL_GPUGraphicsPipeline;
@@ -71,7 +85,7 @@ Gpu_Renderer_Data :: struct {
 
 // #region Renderer Frames
 
-renderer_begin_frame :: (window: *Window, data: *Gpu_Renderer_Data) -> Renderer_Frame, bool
+renderer_begin_frame :: (window: *Window, data: *Gpu_Renderer_Data, clear_color := Vector4.{ 0.0, 0.0, 0.0, 1.0 }) -> Renderer_Frame, bool
 {
     frame: Renderer_Frame;
 
@@ -93,7 +107,7 @@ renderer_begin_frame :: (window: *Window, data: *Gpu_Renderer_Data) -> Renderer_
 
     cti: SDL_GPUColorTargetInfo;
     cti.texture = swapchain_texture;
-    cti.clear_color = SDL_FColor.{ 0.0, 0.0, 0.0, 1.0 };
+    cti.clear_color = cast,force(SDL_FColor) clear_color;
     cti.load_op = .CLEAR;
     cti.store_op = .STORE;
 
