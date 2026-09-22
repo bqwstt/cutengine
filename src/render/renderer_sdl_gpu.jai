@@ -51,27 +51,19 @@ sdl_gpu_renderer_drop :: (window: *Window, data: *Gpu_Renderer_Data)
     SDL_DestroyGPUDevice(data.device);
 }
 
-sdl_gpu_renderer_draw :: (window: *Window, data: *Gpu_Renderer_Data, camera: *Camera)
-{
-    frame, ok := renderer_begin_frame(window, data);
-    if ok {
-        renderer_draw_mesh(*frame, data, camera);
-        renderer_end_frame(*frame);
-    }
-}
-
 sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data, list: *Render_List)
 {
     frame, ok := renderer_begin_frame(window, data, list.clear_color);
     if ok {
-        for command: list.commands {
+        for command: render_list_commands(list) {
             if #complete command.kind == {
             case .DRAW_INDEXED;
-                // @TODO
+                // @TODO: Implement indexed drawing
             }
         }
+
+        renderer_end_frame(*frame);
     }
-    renderer_end_frame(*frame);
 }
 
 Gpu_Renderer_Data :: struct {

@@ -58,6 +58,8 @@ main :: ()
     prev_time := platform_time_ns();
     frame_acc: float64;
 
+    render_list: Render_List;
+
     // Main loop
     while !input.quit_requested {
         new_time := platform_time_ns();
@@ -81,7 +83,7 @@ main :: ()
         alpha := frame_acc / DELTA_WANTED;
 
         // Build render commands list and execute using the current renderer
-        render_list := game_build_render_list(prev_game_state, game_state, alpha);
+        game_construct_render_list(*render_list, prev_game_state, game_state, alpha);
         renderer_execute_commands(*renderer, *render_list);
 
         reset_temporary_storage();
