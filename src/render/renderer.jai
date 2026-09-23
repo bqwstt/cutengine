@@ -97,7 +97,7 @@ Draw_Indexed_Render_Command :: struct {
 // @TODO:
 // push_command :: (list: *Render_List, kind: Render_Command_Kind) -> *Render_Command;
 
-#load "renderer_software.jai";
-#load "renderer_sdl_gpu.jai";
+#load "backend/renderer_software.jai";
+#load "backend/renderer_sdl_gpu.jai";
 
 #import "Basic";
