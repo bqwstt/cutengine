@@ -465,11 +465,53 @@ VERTEX_BUFFER_DESCRIPTIONS :: SDL_GPUVertexBufferDescription.[
     .{ slot = 0, pitch = size_of(Vertex), input_rate = .VERTEX, instance_step_rate = 0 }
 ];
 
-// How is the thing I am going to send look like?
-VERTEX_ATTRIBUTES :: SDL_GPUVertexAttribute.[
-    .{ location = 0, buffer_slot = 0, format = .FLOAT3, offset = #run offset_of(Vertex, "position") }, // Position attribute
-    .{ location = 1, buffer_slot = 0, format = .FLOAT2, offset = #run offset_of(Vertex, "texture_coords") },  // Texture attribute
-];
+VERTEX_ATTRIBUTES_COUNT :: #run field_count(Vertex);
+VERTEX_ATTRIBUTES :: #run make_vertex_attributes(Vertex); // How is the thing I am going to send look like?
+
+field_count :: ($T: Type) -> int #compile_time
+#modify {
+    ti := cast(*Type_Info) T;
+    if ti.type != .STRUCT return false;
+
+    return true;
+} {
+    ti := cast(*Type_Info_Struct) T;
+    n := 0;
+
+    for ti.members {
+        if !(it.flags & .CONSTANT)  n += 1;
+    }
+
+    return n;
+}
+
+make_vertex_attributes :: ($T: Type) -> [VERTEX_ATTRIBUTES_COUNT]SDL_GPUVertexAttribute #compile_time
+{
+    attributes: [VERTEX_ATTRIBUTES_COUNT]SDL_GPUVertexAttribute;
+    ti := cast(*Type_Info_Struct) T;
+
+    i := 0;
+    for member: ti.members {
+        if member.flags & (.CONSTANT | .OVERLAY)  continue;
+
+        format: SDL_GPUVertexElementFormat;
+        if member.type == type_info(Vector2)       format = .FLOAT2;
+        else if member.type == type_info(Vector3)  format = .FLOAT3;
+        else if member.type == type_info(Vector4)  format = .FLOAT4;
+        else if member.type == type_info(float32)  format = .FLOAT;
+        else assert(false, "Vertex member '%' has type with no vertex format mapping.", member.name);
+
+        attributes[i] = .{
+            location = xx i,
+            buffer_slot = 0,
+            format = format,
+            offset = xx member.offset_in_bytes,
+        };
+        i += 1;
+    }
+
+    return attributes;
+}
 
 
 #import "SDL3";

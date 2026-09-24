@@ -66,39 +66,6 @@ model_drop :: (m: *Model)
     array_free(m.vertices);
 }
 
-/// Helper for grabbing the offsite of a member in a struct
-offset_of :: ($T: Type, $member: string) -> int #compile_time
-#modify {
-    ti := cast(*Type_Info) T;
-    if ti.type != .STRUCT return false;
-
-    return true;
-} {
-    for type_info(T).members {
-        if it.name == member  return it.offset_in_bytes;
-    }
-
-    assert(false, "Type '%' does not have member '%'", T, member);
-    return -1;
-}
-
-field_count :: ($T: Type) -> u8 #compile_time
-#modify {
-    ti := cast(*Type_Info) T;
-    if ti.type != .STRUCT return false;
-
-    return true;
-} {
-    ti := cast(*Type_Info_Struct) T;
-    n := 0;
-
-    for ti.members {
-        if !(it.flags & .CONSTANT)  n += 1;
-    }
-
-    return n;
-}
-
 Texture :: struct {}
 
 Handle :: struct($T: Type) {
