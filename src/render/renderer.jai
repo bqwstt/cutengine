@@ -25,10 +25,8 @@ renderer_init :: (window: *Window, backend: Backend_Kind, width: s32, height: s3
 renderer_drop :: (using ren: *Renderer)
 {
     if #complete backend == {
-    case .SOFTWARE;
-        software_renderer_drop(*software_data);
-    case .GPU;
-        sdl_gpu_renderer_drop(window, *gpu_data);
+    case .SOFTWARE; software_renderer_drop(*software_data);
+    case .GPU; sdl_gpu_renderer_drop(window, *gpu_data);
     }
 
     ren.* = .{};
@@ -39,15 +37,31 @@ renderer_execute_commands :: (using ren: *Renderer, list: *Render_List)
     if #complete backend == {
     case .SOFTWARE;
         // TODO: Implement software execution of render list
-    case .GPU;
-        sdl_gpu_renderer_execute_commands(window, *gpu_data, list);
+    case .GPU; sdl_gpu_renderer_execute_commands(window, *gpu_data, list);
     }
 }
 
-render_list_begin :: (list: *Render_List, clear_color: Vector4)
+render_list_begin :: (list: *Render_List, view_projection: Matrix4, clear_color: Vector4 = .{ 0.0, 0.0, 0.0, 1.0 })
 {
     list.clear_color = clear_color;
+    list.view_projection = view_projection;
     list.commands_count = 0;
+}
+
+renderer_upload_mesh :: (using ren: *Renderer, mesh: Mesh) -> Mesh_Handle
+{
+    if #complete backend == {
+    case .SOFTWARE; return .{}; // Nothing?
+    case .GPU; return sdl_gpu_upload_mesh(*gpu_data, mesh);
+    }
+}
+
+render_draw_mesh :: (list: *Render_List, mesh: Mesh_Handle, transform: Matrix4)
+{
+    cmd := push_command(list, .DRAW_INDEXED);
+    if !cmd  return;
+
+    cmd.draw_indexed = Draw_Indexed_Render_Command.{ mesh = mesh, transform = transform };
 }
 
 render_list_commands :: (list: *Render_List) -> []Render_Command { return array_view(list.commands, 0, list.commands_count); }
@@ -82,6 +96,7 @@ Render_Command :: struct {
 
 Render_List :: struct {
     clear_color: Vector4;
+    view_projection: Matrix4; // @TODO: Should this belong here?
 
     commands:       [1024]Render_Command;
     commands_count: s64;
@@ -89,13 +104,21 @@ Render_List :: struct {
 
 Draw_Indexed_Render_Command :: struct {
     mesh: Mesh_Handle;
-    texture: Texture_Handle;
+    transform: Matrix4; // @TODO: Should this belong here?
 }
 
 #scope_file
 
-// @TODO:
-// push_command :: (list: *Render_List, kind: Render_Command_Kind) -> *Render_Command;
+push_command :: (list: *Render_List, kind: Render_Command_Kind) -> *Render_Command
+{
+    if list.commands_count >= list.commands.count  return null;
+
+    cmd := *list.commands[list.commands_count];
+    cmd.kind = kind;
+
+    list.commands_count += 1;
+    return cmd;
+}
 
 #load "backend/renderer_software.jai";
 #load "backend/renderer_sdl_gpu.jai";

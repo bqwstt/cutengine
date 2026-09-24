@@ -19,6 +19,7 @@ DELTA_WANTED :: 1.0 / FPS;
 
 main :: ()
 {
+    // #region Initialization
     // Create static memory for the whole program.
     memory := memory_make(PERMANENT_MEMORY_SIZE, TRANSIENT_MEMORY_SIZE);
 
@@ -35,6 +36,15 @@ main :: ()
     if !renderer_ok  return;
     defer renderer_drop(*renderer);
 
+    // Store current game state and previous game state for later interpolation.
+    // NOTE: These use the permanent allocator, so they live for the whole program.
+    game_state := New(Game_State);
+    game_init(game_state, *renderer);
+
+    prev_game_state := New(Game_State);
+    prev_game_state.* = game_state.*;
+
+    // #region 0-allocs
     // Use trap allocator from now on, no more accidental allocations after this!
     // (Any alloc will now need to pass in either `,,permament_allocator` or `,,transient_allocator`.)
     context.allocator = .{ trap_allocator_proc, null };
@@ -47,13 +57,6 @@ main :: ()
 
     input: Input;
     input.dt = DELTA_WANTED;
-
-    // Store current game state and previous game state for later interpolation.
-    game_state := New(Game_State,, context.permanent_allocator);
-    game_state.camera = camera_make();
-
-    prev_game_state := New(Game_State,, context.permanent_allocator);
-    prev_game_state.camera = camera_make();
 
     prev_time := platform_time_ns();
     frame_acc: float64;

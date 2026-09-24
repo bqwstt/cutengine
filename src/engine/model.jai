@@ -99,18 +99,17 @@ field_count :: ($T: Type) -> u8 #compile_time
     return n;
 }
 
+Texture :: struct {}
+
 Handle :: struct($T: Type) {
     index: u32;
     generation: u32;
 }
 
-Texture :: struct {} // @Opaque
-Mesh    :: struct {} // @Opaque
-
 Mesh_Handle    :: #type,distinct Handle(Mesh);
 Texture_Handle :: #type,distinct Handle(Texture);
 
-Mesh_Data :: struct {
+Mesh :: struct {
     vertices: []Vertex;
     indices:  []u32;
     // @FIXME: Not even sure we need this one right now
@@ -129,6 +128,17 @@ Face :: struct {
 Model :: struct {
     vertices: []Vector3;
     faces:    []Face;
+}
+
+// @TEST: One-off entity for drawing. In general, shouldn't be used for drawing things.
+Object :: struct {
+    mesh: Mesh_Handle;
+
+    position: Vector3;
+    rotation: Quaternion;
+    scale:    Vector3 = .{ 1, 1, 1 };
+
+    spin_angle: float;
 }
 
 #import "Basic";
