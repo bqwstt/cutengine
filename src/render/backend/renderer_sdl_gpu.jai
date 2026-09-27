@@ -91,7 +91,7 @@ sdl_gpu_upload_mesh :: (data: *Gpu_Renderer_Data, mesh_data: Mesh) -> Mesh_Handl
     SDL_UnmapGPUTransferBuffer(data.device, transfer_buffer);
 
     // Create texture
-    texture_image := load_image("awesomeface.png");
+    texture_image := load_image("boid.png");
     if !texture_image {
         log_error("Couldn't load texture image: %", SDL_GetErrorString());
         return .{};
@@ -112,7 +112,7 @@ sdl_gpu_upload_mesh :: (data: *Gpu_Renderer_Data, mesh_data: Mesh) -> Mesh_Handl
     };
     texture := SDL_CreateGPUTexture(data.device, *texture_create_info);
     assert(texture != null, "Couldn't create texture: %", SDL_GetErrorString());
-    SDL_SetGPUTextureName(data.device, texture, "awesomeface");
+    SDL_SetGPUTextureName(data.device, texture, "boid");
 
     texture_transfer_buffer_info := SDL_GPUTransferBufferCreateInfo.{
         usage = .UPLOAD,

@@ -108,6 +108,7 @@ TRANSIENT_MEMORY_SIZE ::  4 * GiB;
 #load "engine/scene.jai";
 #load "engine/model.jai";
 #load "render/renderer.jai";
-#load "game/game.jai";
+// #load "game/game.jai";
+#load "game/boids.jai";
 
 #import "Basic"()(MEMORY_DEBUGGER = DEBUG); // Enable memory debugger on debug buids.
