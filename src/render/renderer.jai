@@ -45,7 +45,9 @@ render_list_begin :: (list: *Render_List, view_projection: Matrix4, clear_color:
 {
     list.clear_color = clear_color;
     list.view_projection = view_projection;
-    list.commands_count = 0;
+
+    reset(*list.commands);
+    reset(*list.instances);
 }
 
 renderer_upload_mesh :: (using ren: *Renderer, mesh: Mesh) -> Mesh_Handle
@@ -64,7 +66,24 @@ render_draw_mesh :: (list: *Render_List, mesh: Mesh_Handle, transform: Matrix4)
     cmd.draw_indexed = Draw_Indexed_Render_Command.{ mesh = mesh, transform = transform };
 }
 
-render_list_commands :: (list: *Render_List) -> []Render_Command { return array_view(list.commands, 0, list.commands_count); }
+render_draw_mesh_instances :: (list: *Render_List, mesh: Mesh_Handle, transform: Matrix4, instances: []Render_Instance)
+{
+    // Copy render instances to list
+    instance := push(*list.instances, instances);
+    if !instance  return;
+
+    cmd := push_command(list, .DRAW_INDEXED_INSTANCES);
+    if !cmd  return;
+
+    cmd.draw_indexed_instances = Draw_Indexed_Instanced_Render_Command.{
+        mesh = mesh,
+        transform = transform,
+        instances = instances.count
+    };
+}
+
+render_list_commands  :: (list: *Render_List) -> []Render_Command { return view(list.commands); }
+render_list_instances :: (list: *Render_List) -> []Render_Instance { return view(list.instances); }
 
 Backend_Kind :: enum u32 {
     GPU :: 0;
@@ -85,21 +104,31 @@ Renderer :: struct {
 
 Render_Command_Kind :: enum u32 {
     DRAW_INDEXED;
+    DRAW_INDEXED_INSTANCES;
 }
 
 Render_Command :: struct {
     using data: Command_Data;
     Command_Data :: union kind: Render_Command_Kind {
         .DRAW_INDEXED ,, draw_indexed: Draw_Indexed_Render_Command;
+        .DRAW_INDEXED_INSTANCES ,, draw_indexed_instances: Draw_Indexed_Instanced_Render_Command;
     }
 }
+
+// @TODO: Not sure if I like to have this here.
+Render_Instance :: struct {
+    position: Vector3;
+    _padding: float;
+}
+// For instanced drawing, shaders use 16-bit aligned float4s, so we need to make sure our struct is 16 bytes as well.
+#assert size_of(Render_Instance) == 16;
 
 Render_List :: struct {
     clear_color: Vector4;
     view_projection: Matrix4; // @TODO: Should this belong here?
 
-    commands:       [1024]Render_Command;
-    commands_count: s64;
+    commands:  Fixed_Array(Render_Command, MAX_RENDER_COMMANDS);
+    instances: Fixed_Array(Render_Instance, MAX_RENDER_INSTANCES);
 }
 
 Draw_Indexed_Render_Command :: struct {
@@ -107,17 +136,21 @@ Draw_Indexed_Render_Command :: struct {
     transform: Matrix4; // @TODO: Should this belong here?
 }
 
+Draw_Indexed_Instanced_Render_Command :: struct {
+    using base: Draw_Indexed_Render_Command;
+    instances: s64;
+}
+
+MAX_RENDER_COMMANDS :: 1024;
+MAX_RENDER_INSTANCES :: 16384;
+
 #scope_file
 
 push_command :: (list: *Render_List, kind: Render_Command_Kind) -> *Render_Command
 {
-    if list.commands_count >= list.commands.count  return null;
-
-    cmd := *list.commands[list.commands_count];
+    cmd: Render_Command;
     cmd.kind = kind;
-
-    list.commands_count += 1;
-    return cmd;
+    return push(*list.commands, cmd);
 }
 
 #load "backend/renderer_software.jai";

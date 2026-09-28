@@ -83,7 +83,8 @@ main :: ()
             game_update(game_state, *input, DELTA_WANTED);
         }
 
-        alpha := frame_acc / DELTA_WANTED;
+        // We don't really care whether alpha is 32 or 64-bit float, we just want to lerp.
+        alpha := cast(float32) frame_acc / DELTA_WANTED;
 
         // Build render commands list and execute using the current renderer
         game_construct_render_list(*render_list, prev_game_state, game_state, alpha);
@@ -103,6 +104,7 @@ GiB :: 1024 * MiB;
 PERMANENT_MEMORY_SIZE :: 64 * MiB;
 TRANSIENT_MEMORY_SIZE ::  4 * GiB;
 
+#load "utils/fixed_array.jai";
 #load "platform/platform.jai";
 #load "platform/platform_sdl.jai"; // @FIXME: Load depending on platform wanted
 #load "engine/scene.jai";

@@ -1,3 +1,5 @@
+/// This is an example Boids simulation game.
+
 game_init :: (state: *Game_State, renderer: *Renderer)
 {
     state.camera = camera_make(is_2d_camera = true);
@@ -5,8 +7,8 @@ game_init :: (state: *Game_State, renderer: *Renderer)
 
     for i: 0 .. N-1 {
         pos := Vector2.{
-            x = WINDOW_WIDTH / 2 + random_get_zero_to_one() * WINDOW_WIDTH / 3,
-            y = WINDOW_HEIGHT / 2 + random_get_zero_to_one() * WINDOW_HEIGHT / 3
+            x = random_get_zero_to_one() * WINDOW_WIDTH,
+            y = random_get_zero_to_one() * WINDOW_HEIGHT
         };
         state.flock.positions[i] = pos;
         state.flock.velocities[i] = Vector2.{
@@ -21,7 +23,7 @@ game_init :: (state: *Game_State, renderer: *Renderer)
 /// Constructs the game render list with commands to be executed by the renderer.
 /// These commands are graphics API-agnostic, which means each individual API will implement
 /// code that will execute these commands in their own layer.
-game_construct_render_list :: (list: *Render_List, prev_state: *Game_State, curr_state: *Game_State, alpha: float64)
+game_construct_render_list :: (list: *Render_List, prev_state: *Game_State, curr_state: *Game_State, alpha: float)
 {
     view_proj := curr_state.camera.projection_matrix * curr_state.camera.view_matrix;
     render_list_begin(list, view_proj);
@@ -94,7 +96,7 @@ clean_and_rebuild_grid :: (grid: *Grid, flock: *Flock)
     }
 }
 
-N :: 5000;
+N :: 10_000;
 VISIBLE_RANGE :: 100.0;
 PROTECTED_RANGE :: 20.0;
 AVOID_FACTOR :: 2.0;
@@ -105,8 +107,10 @@ MAX_SPEED :: 400.0;
 MIN_SPEED :: 200.0;
 
 GRID_CELL_SIZE :: VISIBLE_RANGE;
-GRID_ROWS :: WINDOW_WIDTH / GRID_CELL_SIZE;
-GRID_COLUMNS :: WINDOW_HEIGHT / GRID_CELL_SIZE;
+GRID_ROWS :: WINDOW_HEIGHT / GRID_CELL_SIZE;
+GRID_COLUMNS :: WINDOW_WIDTH / GRID_CELL_SIZE;
+
+MAX_NEIGHBORS :: 24;
 
 update_boids :: (grid: *Grid, flock: *Flock, dt: float64)
 {
@@ -123,18 +127,28 @@ update_boids :: (grid: *Grid, flock: *Flock, dt: float64)
         _, n := table_find(*grid.coord_to_bucket, boid_coord(boid_pos));
         for n {
             index_from_bucket := it;
+            if i == index_from_bucket  continue;
+
             other_pos := flock.positions[index_from_bucket];
             other_vel := flock.velocities[index_from_bucket];
-            if boid_pos != other_pos {
-                dis := distance(boid_pos, other_pos);
-                if dis < PROTECTED_RANGE {
-                    close_vel += boid_pos - other_pos;
-                } else {
-                    neighbors_avg_velocities += other_vel;
-                    avg_pos += other_pos;
-                    neighboring_boids += 1;
-                }
+
+            // In debug builds, operator overloading costs an extra function call,
+            // which can hurt performance. (They won't affect release builds, though.)
+            diff := Vector2.{boid_pos.x - other_pos.x, boid_pos.y - other_pos.y};
+            distance := diff.x * diff.x + diff.y * diff.y; // a^2 + b^2
+
+            if distance < PROTECTED_RANGE*PROTECTED_RANGE {
+                close_vel += boid_pos - other_pos;
+            } else if distance < VISIBLE_RANGE*VISIBLE_RANGE {
+                neighbors_avg_velocities.x += other_vel.x;
+                neighbors_avg_velocities.y += other_vel.y;
+                avg_pos.x += other_pos.x;
+                avg_pos.y += other_pos.y;
+                neighboring_boids += 1;
             }
+
+            // Do not look for more then 24 boids at a time.
+            if neighboring_boids >= MAX_NEIGHBORS  break;
         }
 
         if neighboring_boids > 0 {
@@ -172,20 +186,16 @@ update_boids :: (grid: *Grid, flock: *Flock, dt: float64)
 
 }
 
-draw_boids :: (list: *Render_List, prev_flock: *Flock, flock: *Flock, alpha: float64)
+draw_boids :: (list: *Render_List, prev_flock: *Flock, flock: *Flock, alpha: float)
 {
-    f: Flock;
-    t := cast(float) alpha;
-    f.boid_mesh = flock.boid_mesh;
+    // Fill in instances to draw
+    instances: [N]Render_Instance;
+    for i: 0 .. N-1
+        instances[i].position = make_vector3(lerp(prev_flock.positions[i], flock.positions[i], alpha), 0.0);
 
-    for i: 0 .. N-1 {
-        f.positions[i] =  lerp(prev_flock.positions[i], flock.positions[i], t);
-        f.velocities[i] = lerp(prev_flock.velocities[i], flock.velocities[i], t);
-
-        boid_pos := make_vector3(f.positions[i], 0.0);
-        transform := make_translation_matrix4(boid_pos) * make_scale_matrix4(.{ 3, 3, 0 });
-        render_draw_mesh(list, f.boid_mesh, transform);
-    }
+    // Make boids very small
+    transform := make_scale_matrix4(.{ 1, 1, 1 });
+    render_draw_mesh_instances(list, flock.boid_mesh, transform, instances);
 }
 
 VERTICES :: Vertex.[
