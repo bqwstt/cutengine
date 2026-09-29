@@ -44,6 +44,8 @@ main :: ()
     prev_game_state := New(Game_State);
     prev_game_state.* = game_state.*;
 
+    render_list := New(Render_List);
+
     // #region 0-allocs
     // Use trap allocator from now on, no more accidental allocations after this!
     // (Any alloc will now need to pass in either `,,permament_allocator` or `,,transient_allocator`.)
@@ -60,8 +62,6 @@ main :: ()
 
     prev_time := platform_time_ns();
     frame_acc: float64;
-
-    render_list: Render_List;
 
     // Main loop
     while !input.quit_requested {
@@ -87,8 +87,8 @@ main :: ()
         alpha := cast(float32) frame_acc / DELTA_WANTED;
 
         // Build render commands list and execute using the current renderer
-        game_construct_render_list(*render_list, prev_game_state, game_state, alpha);
-        renderer_execute_commands(*renderer, *render_list);
+        game_construct_render_list(render_list, prev_game_state, game_state, alpha);
+        renderer_execute_commands(*renderer, render_list);
 
         reset_temporary_storage();
     }
