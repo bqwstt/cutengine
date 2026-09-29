@@ -10,6 +10,7 @@ build :: ()
     build_options := get_build_options();
     build_options.output_executable_name = "cutengine";
     build_options.additional_linker_arguments = .["-rpath", "@loader_path/../lib"]; // Link SDL3
+    build_options.temporary_storage_size = 8 * 1024 * 1024; // Default to 8 MiB for per-frame allocations
     set_build_options_dc(.{do_output = false});
     set_working_directory(#filepath);
 

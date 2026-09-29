@@ -10,9 +10,13 @@ engine_logger :: (message: string, data: *void, info: Log_Info)
     write_strings(prefix, message, newline, to_standard_error = (info.common_flags & .ERROR) != 0);
 }
 
-// Add allocators to the context to use globally.
+// Add game memory to the context so that we can reset temporary data from anywhere.
+#add_context memory: *Memory;
+
+// Add allocators to the context so that we can allocate globally.
 #add_context permanent_allocator: Allocator;
 #add_context transient_allocator: Allocator;
+#add_context per_frame_allocator: Allocator;
 
 FPS :: 60.0;
 DELTA_WANTED :: 1.0 / FPS;
@@ -23,11 +27,16 @@ main :: ()
     // Create static memory for the whole program.
     memory := memory_make(PERMANENT_MEMORY_SIZE, TRANSIENT_MEMORY_SIZE);
 
+    // Populate context
     context.logger = engine_logger;
+    context.memory = *memory;
     context.permanent_allocator = permanent_allocator(*memory);
     context.transient_allocator = transient_allocator(*memory);
+    context.per_frame_allocator = temporary_allocator;
+
     context.allocator = context.permanent_allocator; // Use permanent allocation for initialization
 
+    // Initialize window and renderer
     window, window_ok := platform_init("cutty", WINDOW_WIDTH, WINDOW_HEIGHT);
     if !window_ok  return;
     defer platform_shutdown(*window);

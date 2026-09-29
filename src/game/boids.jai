@@ -84,15 +84,13 @@ boid_coord :: (boid_pos: Vector2) -> Cell_Coord
 
 clean_and_rebuild_grid :: (grid: *Grid, flock: *Flock)
 {
-    for *grid.coord_to_bucket {
-        array_reset_keeping_memory(it);
-    }
+    for *grid.coord_to_bucket  it.* = [..]int.{};
 
     for flock.positions {
         coord := boid_coord(it);
         bucket := table_find_pointer(*grid.coord_to_bucket, coord);
         if !bucket  bucket = table_add(*grid.coord_to_bucket, coord, [..]int.{});
-        array_add(bucket, it_index,, context.transient_allocator);
+        array_add(bucket, it_index,, context.per_frame_allocator);
     }
 }
 
