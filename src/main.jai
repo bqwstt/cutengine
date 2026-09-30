@@ -67,7 +67,6 @@ main :: ()
     defer ts.overflow_allocator = oa;
 
     input: Input;
-    input.dt = DELTA_WANTED;
 
     prev_time := platform_time_ns();
     frame_acc: float64;
@@ -81,6 +80,8 @@ main :: ()
 
         platform_poll_events(*window, *input);
 
+        if key_was_pressed(*input, .ESCAPE)  break;
+
         frame_acc += frame_time;
         ticks := cast(int) floor(frame_acc / DELTA_WANTED);
         frame_acc -= cast(float64) ticks * DELTA_WANTED;
@@ -90,6 +91,7 @@ main :: ()
             // Note that the game runs on a fixed delta
             prev_game_state.* = game_state.*;
             game_update(game_state, *input, DELTA_WANTED);
+            reset_keyboard_input(*input);
         }
 
         // We don't really care whether alpha is 32 or 64-bit float, we just want to lerp.

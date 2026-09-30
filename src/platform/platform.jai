@@ -29,6 +29,28 @@ platform_time_ns :: () -> u64
     return cast(u64) to_nanoseconds(current_time_monotonic());
 }
 
+key_is_down :: (input: *Input, key: Keyboard_Key) -> bool
+{
+    return input.keyboard_buttons[key].ended_down;
+}
+
+key_was_pressed :: (input: *Input, key: Keyboard_Key) -> bool
+{
+    b := input.keyboard_buttons[key];
+    return b.half_transitions > 1 || (b.half_transitions == 1 && b.ended_down);
+}
+
+key_was_released :: (input: *Input, key: Keyboard_Key) -> bool
+{
+    b := input.keyboard_buttons[key];
+    return b.half_transitions > 1 || (b.half_transitions == 1 && !b.ended_down);
+}
+
+reset_keyboard_input :: inline (input: *Input)
+{
+    for *input.keyboard_buttons  it.half_transitions = 0;
+}
+
 Native_Window :: struct {} // Opaque on purpose
 
 Window :: struct {
@@ -38,18 +60,15 @@ Window :: struct {
 }
 
 Input :: struct {
-    mouse_x: float;
-    mouse_y: float;
-    mouse_dx: float;
-    mouse_dy: float;
-
-    dt: float64;
-
+    mouse_pos: Vector2;
     quit_requested: bool;
-    keyboard_buttons_pressed: Ring_Buffer(Keyboard_Button);
+    keyboard_buttons: [KEYBOARD_BUTTONS_AMOUNT]Button_State;
 }
 
+// We follow a US-QWERTY keyboard.
 Keyboard_Key :: enum u8 {
+    UNKNOWN;
+
     Q; W; E; R; T; Y; U; I; O; P;
     A; S; D; F; G; H; J; K; L;
     Z; X; C; V; B; N; M;
@@ -66,20 +85,24 @@ Keyboard_Key :: enum u8 {
     COMMA; DOT; SLASH;
     BACKTICK;
 
+    // Modifiers
+    LEFT_SHIFT; RIGHT_SHIFT;
+    LEFT_CTRL;  RIGHT_CTRL;
+    LEFT_ALT;   RIGHT_ALT;
+    LEFT_CMD;   RIGHT_CMD;
+
     RETURN;
     DELETE;
+    ESCAPE;
 }
 
-Keyboard_Modifier :: enum u8 {
-    SHIFT;
-    CTRL_OR_CMD;
-    ALT_OR_OPTION;
-}
+KEYBOARD_BUTTONS_AMOUNT :: #run enum_highest_value(Keyboard_Key) + 1;
 
-Keyboard_Button :: struct {
-    qwerty_key: Keyboard_Key;
-    real_key: Keyboard_Key;
-    modifiers: [2]Keyboard_Modifier;
+/// Handmade-Hero style input
+/// - https://www.youtube.com/watch?v=Lt9DfMzZ9sI
+Button_State :: struct {
+    ended_down:       bool;
+    half_transitions: u8;
 }
 
 /// How memory works
@@ -116,11 +139,6 @@ Keyboard_Button :: struct {
 Memory :: struct {
     permanent: Flat_Pool;
     transient: Flat_Pool;
-}
-
-// @FIXME: Move to utils... and implement!
-Ring_Buffer :: struct($T: Type) {
-
 }
 
 #import "Flat_Pool";
