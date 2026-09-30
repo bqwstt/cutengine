@@ -91,7 +91,7 @@ main :: ()
             // Note that the game runs on a fixed delta
             prev_game_state.* = game_state.*;
             game_update(game_state, *input, DELTA_WANTED);
-            reset_keyboard_input(*input);
+            reset_input(*input);
         }
 
         // We don't really care whether alpha is 32 or 64-bit float, we just want to lerp.

@@ -37,6 +37,8 @@ platform_poll_events :: (window: *Window, input: *Input)
 	    if event.type == {
 		case .QUIT;
 		    input.quit_requested = true;
+
+        // Keyboard-related events
 		case .KEY_DOWN; #through;
         case .KEY_UP;
             if event.key.repeat  continue;
@@ -46,6 +48,21 @@ platform_poll_events :: (window: *Window, input: *Input)
             b := *input.keyboard_buttons[key];
             b.ended_down = event.type == .KEY_DOWN;
             b.half_transitions += 1;
+
+        // Mouse-related events
+        case .MOUSE_BUTTON_DOWN; #through;
+        case .MOUSE_BUTTON_UP;
+            button := translate_sdl_mouse_button(event.button.button);
+            b := *input.mouse_buttons[button];
+            b.ended_down = event.type == .MOUSE_BUTTON_DOWN;
+            b.half_transitions += 1;
+        case .MOUSE_WHEEL;
+            input.mouse_scroll_wheel += event.wheel.y;
+        case .MOUSE_MOTION;
+            input.mouse_pos.x = event.motion.x;
+            input.mouse_pos.y = event.motion.y;
+            input.mouse_delta.x = event.motion.xrel;
+            input.mouse_delta.y = event.motion.yrel;
 	    }
 	}
 }
@@ -55,6 +72,17 @@ platform_poll_events :: (window: *Window, input: *Input)
 convert_to_sdl_window :: inline (w: *Window) -> *SDL_Window
 {
     return cast(*SDL_Window) w.native;
+}
+
+translate_sdl_mouse_button :: (sdl_button: u8) -> Mouse_Button
+{
+    if sdl_button == {
+        case SDL_BUTTON_LEFT;   return .LEFT_CLICK;
+        case SDL_BUTTON_RIGHT;  return .RIGHT_CLICK;
+        case SDL_BUTTON_MIDDLE; return .SCROLL_WHEEL_CLICK;
+    }
+
+    return .UNKNOWN;
 }
 
 translate_sdl_key :: (sdl_key: SDL_Scancode) -> Keyboard_Key

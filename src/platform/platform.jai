@@ -1,3 +1,5 @@
+/// #region Functions -> Memory
+
 memory_make :: (permanent_size: s64, transient_size: s64) -> Memory
 {
     m: Memory;
@@ -22,6 +24,8 @@ trap_allocator_proc :: (mode: Allocator_Mode, size: s64, old_size: s64, old: *vo
     return null;
 }
 
+/// #region Functions->Platform
+
 /// Shared between all platforms.
 /// This could be implemented by each platform separately, but for now, using Jai's clock is fine.
 platform_time_ns :: () -> u64
@@ -29,27 +33,24 @@ platform_time_ns :: () -> u64
     return cast(u64) to_nanoseconds(current_time_monotonic());
 }
 
-key_is_down :: (input: *Input, key: Keyboard_Key) -> bool
-{
-    return input.keyboard_buttons[key].ended_down;
-}
+/// #region Functions->Input
 
-key_was_pressed :: (input: *Input, key: Keyboard_Key) -> bool
-{
-    b := input.keyboard_buttons[key];
-    return b.half_transitions > 1 || (b.half_transitions == 1 && b.ended_down);
-}
+mouse_is_down      :: (input: *Input, button: Mouse_Button) -> bool { return is_down(input.mouse_buttons[button]); }
+mouse_was_pressed  :: (input: *Input, button: Mouse_Button) -> bool { return was_pressed(input.mouse_buttons[button]); }
+mouse_was_released :: (input: *Input, button: Mouse_Button) -> bool { return was_released(input.mouse_buttons[button]); }
 
-key_was_released :: (input: *Input, key: Keyboard_Key) -> bool
-{
-    b := input.keyboard_buttons[key];
-    return b.half_transitions > 1 || (b.half_transitions == 1 && !b.ended_down);
-}
+key_is_down      :: (input: *Input, key: Keyboard_Key) -> bool { return is_down(input.keyboard_buttons[key]); }
+key_was_pressed  :: (input: *Input, key: Keyboard_Key) -> bool { return was_pressed(input.keyboard_buttons[key]); }
+key_was_released :: (input: *Input, key: Keyboard_Key) -> bool { return was_released(input.keyboard_buttons[key]); }
 
-reset_keyboard_input :: inline (input: *Input)
+reset_input :: inline (input: *Input)
 {
+    input.mouse_scroll_wheel = 0.0;
+    for *input.mouse_buttons  it.half_transitions = 0;
     for *input.keyboard_buttons  it.half_transitions = 0;
 }
+
+/// #region Data->Platform
 
 Native_Window :: struct {} // Opaque on purpose
 
@@ -59,10 +60,25 @@ Window :: struct {
     height: s32;
 }
 
+/// #region Data->Input
+
 Input :: struct {
     mouse_pos: Vector2;
+    mouse_delta: Vector2;
+    mouse_scroll_wheel: float;
+
     quit_requested: bool;
+
+    mouse_buttons:    [MOUSE_BUTTONS_AMOUNT]Button_State;
     keyboard_buttons: [KEYBOARD_BUTTONS_AMOUNT]Button_State;
+}
+
+Mouse_Button :: enum u8 {
+    UNKNOWN;
+
+    LEFT_CLICK;
+    RIGHT_CLICK;
+    SCROLL_WHEEL_CLICK;
 }
 
 // We follow a US-QWERTY keyboard.
@@ -96,6 +112,7 @@ Keyboard_Key :: enum u8 {
     ESCAPE;
 }
 
+MOUSE_BUTTONS_AMOUNT :: #run enum_highest_value(Mouse_Button) + 1;
 KEYBOARD_BUTTONS_AMOUNT :: #run enum_highest_value(Keyboard_Key) + 1;
 
 /// Handmade-Hero style input
@@ -104,6 +121,8 @@ Button_State :: struct {
     ended_down:       bool;
     half_transitions: u8;
 }
+
+/// #region Data->Memory
 
 /// How memory works
 /// ================
@@ -139,6 +158,23 @@ Button_State :: struct {
 Memory :: struct {
     permanent: Flat_Pool;
     transient: Flat_Pool;
+}
+
+#scope_file
+
+is_down :: (b: Button_State) -> bool
+{
+    return b.ended_down;
+}
+
+was_pressed :: (b: Button_State) -> bool
+{
+    return b.half_transitions > 1 || (b.half_transitions == 1 && b.ended_down);
+}
+
+was_released :: (b: Button_State) -> bool
+{
+    return b.half_transitions > 1 || (b.half_transitions == 1 && !b.ended_down);
 }
 
 #import "Flat_Pool";
