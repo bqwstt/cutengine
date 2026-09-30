@@ -1,11 +1,14 @@
 // #region 3D
 
 Camera :: struct {
-    position: Vector3;
+    position: Vector3;     // Position of the camera in world space
+    rotation: Quaternion;  // Rotation of the camera (pitch, yaw - roll not used)
+    euler_angles: Vector2; // Rotation in euler angles (x, y) used to calculate rotation
 
     fov: float;
     aspect_ratio: float;
 
+    // The following aren't supposed to be editable but computed.
     view_matrix: Matrix4;
     projection_matrix: Matrix4;
 }
@@ -34,10 +37,32 @@ camera_make :: ($is_2d_camera := false) -> Camera
     return camera;
 }
 
-camera_move :: (c: *Camera, delta: Vector3)
+/// Moves the camera by `delta` steps, in all x, y and z components.
+camera_move :: (using c: *Camera, delta: Vector3)
 {
-    c.position += delta;
-    c.view_matrix = make_translation_matrix4(-c.position);
+    position += delta;
+    view_matrix = make_translation_matrix4(-position) * rotation_matrix(Matrix4, rotation);
+}
+
+/// Rotates the camera using `amount` (x and y components only).
+/// This effectively is the camera's pitch and yaw. Does not roll the camera (i.e., rotation around the z axis).
+camera_rotate :: (using c: *Camera, amount: Vector2)
+{
+    yaw:   Quaternion;
+    pitch: Quaternion;
+
+    euler_angles.x += amount.x;
+    euler_angles.y += amount.y;
+
+    // Clamp to void gimbal lock
+    // Taken from examples/skeletal-animation/camera.jai
+    euler_angles.y = clamp(euler_angles.y, -89.0 * PI / 180.0, 89.0 * PI / 180.0);
+
+    set_from_axis_and_angle(*yaw, 0, 1, 0, euler_angles.x);
+    set_from_axis_and_angle(*pitch, 1, 0, 0, euler_angles.y);
+    rotation = yaw * pitch;
+
+    view_matrix = make_translation_matrix4(-position) * rotation_matrix(Matrix4, rotation);
 }
 
 // #region 2D
