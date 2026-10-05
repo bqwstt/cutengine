@@ -410,7 +410,7 @@ load_shader :: (device: *SDL_GPUDevice, path: string, num_samplers: u32 = 0, num
     }
 
     // @FIXME: Relative path used here
-    full_path := path_join(to_string(SDL_GetBasePath()), "../assets/shader");
+    full_path := path_join(to_string(SDL_GetBasePath()), "../assets/shader/out");
 
     entrypoint: *u8;
     format: SDL_GPUShaderFormat = SDL_GPU_SHADERFORMAT_INVALID;
