@@ -7,12 +7,7 @@ renderer_init :: (window: *Window, backend: Backend_Kind, width: s32, height: s3
     ren.window = window;
 
     if #complete backend == {
-    case .SOFTWARE;
-        data, ok := software_renderer_make(window, width, height);
-        if !ok  return .{}, false;
-
-        ren.software_data = data;
-    case .GPU;
+    case .SDL_GPU;
         data, ok := sdl_gpu_renderer_make(window);
         if !ok  return .{}, false;
 
@@ -25,8 +20,7 @@ renderer_init :: (window: *Window, backend: Backend_Kind, width: s32, height: s3
 renderer_drop :: (using ren: *Renderer)
 {
     if #complete backend == {
-    case .SOFTWARE; software_renderer_drop(*software_data);
-    case .GPU; sdl_gpu_renderer_drop(window, *gpu_data);
+    case .SDL_GPU; sdl_gpu_renderer_drop(window, *gpu_data);
     }
 
     ren.* = .{};
@@ -35,9 +29,7 @@ renderer_drop :: (using ren: *Renderer)
 renderer_execute_commands :: (using ren: *Renderer, list: *Render_List)
 {
     if #complete backend == {
-    case .SOFTWARE;
-        // TODO: Implement software execution of render list
-    case .GPU; sdl_gpu_renderer_execute_commands(window, *gpu_data, list);
+    case .SDL_GPU; sdl_gpu_renderer_execute_commands(window, *gpu_data, list);
     }
 }
 
@@ -53,8 +45,7 @@ render_list_begin :: (list: *Render_List, view_projection: Matrix4, clear_color:
 renderer_upload_mesh :: (using ren: *Renderer, mesh: Mesh) -> Mesh_Handle
 {
     if #complete backend == {
-    case .SOFTWARE; return .{}; // Nothing?
-    case .GPU; return sdl_gpu_upload_mesh(*gpu_data, mesh);
+    case .SDL_GPU; return sdl_gpu_upload_mesh(*gpu_data, mesh);
     }
 }
 
@@ -86,8 +77,7 @@ render_list_commands  :: (list: *Render_List) -> []Render_Command { return view(
 render_list_instances :: (list: *Render_List) -> []Render_Instance { return view(list.instances); }
 
 Backend_Kind :: enum u32 {
-    GPU :: 0;
-    SOFTWARE :: 1;
+    SDL_GPU :: 0;
 }
 
 Renderer :: struct {
@@ -95,8 +85,7 @@ Renderer :: struct {
 
     using data: Backend_Data;
     Backend_Data :: union backend: Backend_Kind {
-        .SOFTWARE ,, software_data: Software_Renderer_Data;
-        .GPU      ,, gpu_data: Gpu_Renderer_Data;
+        .SDL_GPU ,, gpu_data: Gpu_Renderer_Data;
     }
 }
 
@@ -153,7 +142,6 @@ push_command :: (list: *Render_List, kind: Render_Command_Kind) -> *Render_Comma
     return push(*list.commands, cmd);
 }
 
-#load "backend/renderer_software.jai";
 #load "backend/renderer_sdl_gpu.jai";
 
 #import "Basic";

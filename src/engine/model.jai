@@ -8,8 +8,7 @@ model_load :: (path: string) -> Model, bool
         return .{}, false;
     }
 
-    verts: [..]Vector3;  verts.allocator = temp;
-    faces: [..]Face;  faces.allocator = temp;
+    verts: [..]Vector3;  verts.allocator = context.per_frame_allocator;
 
     for line: split(file, "\n",, temp) {
         s := line;
@@ -35,14 +34,12 @@ model_load :: (path: string) -> Model, bool
                 while s.count && s[0] == #char " "  advance(*s, 1);
             }
 
-            f := Face.{ idx[0], idx[1], idx[2] };
-            array_add(*faces, f);
+            // @TODO: Construct indices
         }
     }
 
     m: Model;
     m.vertices = array_copy(verts);
-    m.faces = array_copy(faces);
     return m, true;
 }
 
@@ -62,7 +59,6 @@ model_transform :: (m: Model, rotation: Vector3) -> []Vector3
 // @TODO: Use arenas for models, this should not be used
 model_drop :: (m: *Model)
 {
-    array_free(m.faces);
     array_free(m.vertices);
 }
 
@@ -85,16 +81,13 @@ Mesh :: struct {
 
 Vertex :: struct {
     position: Vector3;
+    normal: Vector3;
     texture_coords: Vector2;
-}
-
-Face :: struct {
-    a, b, c: s32;
 }
 
 Model :: struct {
     vertices: []Vector3;
-    faces:    []Face;
+    indices:  []u32;
 }
 
 // @TEST: One-off entity for drawing. In general, shouldn't be used for drawing things.

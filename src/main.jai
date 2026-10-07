@@ -41,7 +41,7 @@ main :: ()
     if !window_ok  return;
     defer platform_shutdown(*window);
 
-    renderer, renderer_ok := renderer_init(*window, .GPU, WINDOW_WIDTH, WINDOW_HEIGHT);
+    renderer, renderer_ok := renderer_init(*window, .SDL_GPU, WINDOW_WIDTH, WINDOW_HEIGHT);
     if !renderer_ok  return;
     defer renderer_drop(*renderer);
 
