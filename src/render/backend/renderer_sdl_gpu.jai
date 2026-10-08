@@ -104,11 +104,14 @@ sdl_gpu_upload_mesh :: (data: *Gpu_Renderer_Data, mesh_data: Mesh) -> Mesh_Handl
     SDL_UnmapGPUTransferBuffer(data.device, transfer_buffer);
 
     // Create texture
-    texture_image := load_image("boid.png");
-    if !texture_image {
+    surface := load_image("stone.png");
+    if !surface {
         log_error("Couldn't load texture image: %", SDL_GetErrorString());
         return .{};
     }
+    defer SDL_DestroySurface(surface);
+
+    texture_image := SDL_ConvertSurface(surface, .RGBA32);
     defer SDL_DestroySurface(texture_image);
 
     tex_w := cast(u32) texture_image.w;
