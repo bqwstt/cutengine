@@ -22,8 +22,8 @@ camera_make :: (window: *Window, $is_2d_camera := false) -> Camera
 
     #if is_2d_camera {
         camera.projection_matrix = orthographic_projection_matrix(
-            0, window_width,
-            window_height, 0,
+            0, cast(float) window_width,
+            cast(float) window_height, 0,
             0.1, 1000.0, depth_range_01 = true);
     } else {
         camera.fov = 90;
