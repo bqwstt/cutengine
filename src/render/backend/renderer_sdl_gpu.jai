@@ -233,7 +233,10 @@ sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data,
     frame, ok := renderer_begin_frame(window, data, list);
     if ok {
         // Push camera uniform
-        SDL_PushGPUVertexUniformData(frame.command_buffer, 0, *list.view_projection, size_of(Matrix4));
+        SDL_PushGPUVertexUniformData(frame.command_buffer, 0, *list.setup.view_projection, size_of(Matrix4));
+
+        // Push light uniform
+        SDL_PushGPUFragmentUniformData(frame.command_buffer, 0, *list.setup.global_light_color, size_of(Vector4));
 
         // Execute all commands
         for command: render_list_commands(list) {
@@ -344,7 +347,7 @@ renderer_begin_frame :: (window: *Window, data: *Gpu_Renderer_Data, list: *Rende
 
     cti: SDL_GPUColorTargetInfo;
     cti.texture = swapchain_texture;
-    cti.clear_color = cast,force(SDL_FColor) list.clear_color;
+    cti.clear_color = cast,force(SDL_FColor) list.setup.clear_color;
     cti.load_op = .CLEAR;
     cti.store_op = .STORE;
 
@@ -423,7 +426,7 @@ upload_instance_data :: (data: *Gpu_Renderer_Data, instances: []Render_Instance)
 // #region Shaders
 
 /// @TODO: This can be done at compile time, probably
-load_shader :: (device: *SDL_GPUDevice, path: string, num_samplers: u32 = 0, num_storage_buffers: u32 = 0) -> *SDL_GPUShader
+load_shader :: (device: *SDL_GPUDevice, path: string, num_samplers: u32 = 0, num_storage_buffers: u32 = 0, num_uniforms: u32 = 0) -> *SDL_GPUShader
 {
     stage: SDL_GPUShaderStage;
     if ends_with(path, ".vert")       stage = .VERTEX;
@@ -476,7 +479,7 @@ load_shader :: (device: *SDL_GPUDevice, path: string, num_samplers: u32 = 0, num
     shader_info.stage = stage;
     shader_info.num_samplers = num_samplers;
     shader_info.num_storage_buffers = num_storage_buffers;
-    shader_info.num_uniform_buffers = 2;
+    shader_info.num_uniform_buffers = num_uniforms;
 
     return SDL_CreateGPUShader(device, *shader_info);
 }
@@ -491,11 +494,11 @@ load_image :: (path: string) -> *SDL_Surface
 create_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice) -> *SDL_GPUGraphicsPipeline
 {
     // Load vertex and fragment shaders
-    vertex_shader := load_shader(device, "position.vert");
+    vertex_shader := load_shader(device, "position.vert", num_uniforms = 2);
     assert(vertex_shader != null, "Couldn't create vertex shader: %", SDL_GetErrorString());
     defer SDL_ReleaseGPUShader(device, vertex_shader);
 
-    fragment_shader := load_shader(device, "texture.frag", num_samplers = 1);
+    fragment_shader := load_shader(device, "texture.frag", num_samplers = 1, num_uniforms = 1);
     assert(fragment_shader != null, "Couldn't create fragment shader: %", SDL_GetErrorString());
     defer SDL_ReleaseGPUShader(device, fragment_shader);
 
@@ -539,11 +542,11 @@ create_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice) -> *SDL_GPUGrap
 create_instanced_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice) -> *SDL_GPUGraphicsPipeline
 {
     // Load vertex and fragment shaders
-    vertex_shader := load_shader(device, "position_instanced.vert", num_storage_buffers = 1);
+    vertex_shader := load_shader(device, "position_instanced.vert", num_storage_buffers = 1, num_uniforms = 2);
     assert(vertex_shader != null, "Couldn't create vertex shader for instance pipeline: %", SDL_GetErrorString());
     defer SDL_ReleaseGPUShader(device, vertex_shader);
 
-    fragment_shader := load_shader(device, "texture.frag", num_samplers = 1);
+    fragment_shader := load_shader(device, "texture.frag", num_samplers = 1, num_uniforms = 2);
     assert(fragment_shader != null, "Couldn't create fragment shader: %", SDL_GetErrorString());
     defer SDL_ReleaseGPUShader(device, fragment_shader);
 

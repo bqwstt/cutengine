@@ -33,11 +33,9 @@ renderer_execute_commands :: (using ren: *Renderer, list: *Render_List)
     }
 }
 
-render_list_begin :: (list: *Render_List, view_projection: Matrix4, clear_color: Vector4 = .{ 0.0, 0.0, 0.0, 1.0 })
+render_list_begin :: (list: *Render_List, setup: Render_Setup)
 {
-    list.clear_color = clear_color;
-    list.view_projection = view_projection;
-
+    list.setup = setup;
     reset(*list.commands);
     reset(*list.instances);
 }
@@ -73,7 +71,7 @@ render_draw_mesh_instances :: (list: *Render_List, mesh: Mesh_Handle, transform:
     };
 }
 
-render_list_commands  :: (list: *Render_List) -> []Render_Command { return view(list.commands); }
+render_list_commands  :: (list: *Render_List) -> []Render_Command  { return view(list.commands); }
 render_list_instances :: (list: *Render_List) -> []Render_Instance { return view(list.instances); }
 
 Backend_Kind :: enum u32 {
@@ -113,11 +111,16 @@ Render_Instance :: struct {
 #assert size_of(Render_Instance) == 16;
 
 Render_List :: struct {
-    clear_color: Vector4;
-    view_projection: Matrix4; // @TODO: Should this belong here?
-
+    setup:     Render_Setup;
     commands:  Fixed_Array(Render_Command, MAX_RENDER_COMMANDS);
     instances: Fixed_Array(Render_Instance, MAX_RENDER_INSTANCES);
+}
+
+// Per-frame data, mostly used to push uniforms
+Render_Setup :: struct {
+    clear_color: Vector4;
+    global_light_color: Vector4;
+    view_projection: Matrix4;
 }
 
 Draw_Indexed_Render_Command :: struct {
