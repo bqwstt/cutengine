@@ -288,6 +288,9 @@ Gpu_Renderer_Data :: struct {
     pipeline: *SDL_GPUGraphicsPipeline;
     instanced_pipeline: *SDL_GPUGraphicsPipeline;
 
+    depth_texture:    *SDL_GPUTexture;
+    depth_w, depth_h: u32;
+
     instance_buffer: *SDL_GPUBuffer;
 
     // @TODO: Is this the right place to store meshes?
@@ -316,22 +319,26 @@ renderer_begin_frame :: (window: *Window, data: *Gpu_Renderer_Data, list: *Rende
         *frame.width, *frame.height); 
     assert(ok, "Couldn't acquire swapchain texture: %", SDL_GetErrorString());
 
-    window_width, window_height := platform_get_window_width(window);
+    // Create/recreate depth texture when the window gets resized
+    if !data.depth_texture || data.depth_w != frame.width || data.depth_h != frame.height {
+        depth_texture_create_info := SDL_GPUTextureCreateInfo.{
+            format = get_supported_depth_format(data.device),
+            usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
+            width = frame.width,
+            height = frame.height,
+            layer_count_or_depth = 1,
+            num_levels = 1,
+        };
 
-    depth_texture_create_info := SDL_GPUTextureCreateInfo.{
-        format = get_supported_depth_format(data.device),
-        usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
-        width = cast(u32)  window_width,
-        height = cast(u32) window_height,
-        layer_count_or_depth = 1,
-        num_levels = 1,
-    };
+        data.depth_texture = SDL_CreateGPUTexture(data.device, *depth_texture_create_info);
+        assert(data.depth_texture != null, "Couldn't create depth texture: %", SDL_GetErrorString());
 
-    depth_texture := SDL_CreateGPUTexture(data.device, *depth_texture_create_info);
-    assert(depth_texture != null, "Couldn't create depth texture: %", SDL_GetErrorString());
+        data.depth_w = frame.width;
+        data.depth_h = frame.height;
+    }
 
     depth_stencil_target_info := SDL_GPUDepthStencilTargetInfo.{
-        texture = depth_texture,
+        texture = data.depth_texture,
         load_op = .CLEAR,
         store_op = .DONT_CARE,
         clear_depth = 1,
