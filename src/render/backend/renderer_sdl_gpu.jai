@@ -313,6 +313,27 @@ renderer_begin_frame :: (window: *Window, data: *Gpu_Renderer_Data, list: *Rende
         *frame.width, *frame.height); 
     assert(ok, "Couldn't acquire swapchain texture: %", SDL_GetErrorString());
 
+    window_width, window_height := platform_get_window_width(window);
+
+    depth_texture_create_info := SDL_GPUTextureCreateInfo.{
+        format = get_supported_depth_format(data.device),
+        usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
+        width = cast(u32)  window_width,
+        height = cast(u32) window_height,
+        layer_count_or_depth = 1,
+        num_levels = 1,
+    };
+
+    depth_texture := SDL_CreateGPUTexture(data.device, *depth_texture_create_info);
+    assert(depth_texture != null, "Couldn't create depth texture: %", SDL_GetErrorString());
+
+    depth_stencil_target_info := SDL_GPUDepthStencilTargetInfo.{
+        texture = depth_texture,
+        load_op = .CLEAR,
+        store_op = .DONT_CARE,
+        clear_depth = 1,
+    };
+
     // Upload instance positions to the GPU every frame
     // This has to get run even if the swapchain is not present, such that entities get updated
     // even if e.g. the window is minimized.
@@ -327,7 +348,7 @@ renderer_begin_frame :: (window: *Window, data: *Gpu_Renderer_Data, list: *Rende
     cti.load_op = .CLEAR;
     cti.store_op = .STORE;
 
-    frame.pass = SDL_BeginGPURenderPass(frame.command_buffer, *cti, 1, null);
+    frame.pass = SDL_BeginGPURenderPass(frame.command_buffer, *cti, 1, *depth_stencil_target_info);
     return frame, true;
 }
 
@@ -501,7 +522,14 @@ create_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice) -> *SDL_GPUGrap
         },
         target_info = SDL_GPUGraphicsPipelineTargetInfo.{
             color_target_descriptions = color_target_description.data,
-            num_color_targets = color_target_description.count
+            num_color_targets = color_target_description.count,
+            depth_stencil_format = get_supported_depth_format(device),
+            has_depth_stencil_target = true,
+        },
+        depth_stencil_state = SDL_GPUDepthStencilState.{
+            compare_op = .LESS,
+            enable_depth_test = true,
+            enable_depth_write = true,
         }
     };
 
@@ -545,10 +573,36 @@ create_instanced_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice) -> *S
         target_info = SDL_GPUGraphicsPipelineTargetInfo.{
             color_target_descriptions = color_target_description.data,
             num_color_targets = color_target_description.count,
+            depth_stencil_format = get_supported_depth_format(device),
+            has_depth_stencil_target = true,
+        },
+        depth_stencil_state = SDL_GPUDepthStencilState.{
+            compare_op = .LESS,
+            enable_depth_test = true,
+            enable_depth_write = true,
         }
     };
 
     return SDL_CreateGPUGraphicsPipeline(device, *pci);
+}
+
+get_supported_depth_format :: (device: *SDL_GPUDevice) -> SDL_GPUTextureFormat
+{
+    possible_formats := SDL_GPUTextureFormat.[
+        .D32_FLOAT_S8_UINT,
+        .D24_UNORM_S8_UINT,
+        .D32_FLOAT,
+        .D24_UNORM,
+        .D16_UNORM,
+    ];
+
+    for possible_formats {
+        if SDL_GPUTextureSupportsFormat(device, it, ._2D, SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET) {
+            return it;
+        }
+    }
+
+    return .INVALID;
 }
 
 // @TODO: This should be backend-specific but used by the game layer, maybe?

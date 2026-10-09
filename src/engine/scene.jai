@@ -11,21 +11,23 @@ Camera :: struct {
     projection_matrix: Matrix4;
 }
 
-camera_make :: ($is_2d_camera := false) -> Camera
+camera_make :: (window: *Window, $is_2d_camera := false) -> Camera
 {
     camera: Camera;
     camera.position = .{ 0, 0, 0 };
 
     camera.view_matrix = make_translation_matrix4(make_vector3(0));
 
+    window_width, window_height := platform_get_window_width(window);
+
     #if is_2d_camera {
         camera.projection_matrix = orthographic_projection_matrix(
-            0, WINDOW_WIDTH,
-            WINDOW_HEIGHT, 0,
+            0, window_width,
+            window_height, 0,
             0.1, 1000.0, depth_range_01 = true);
     } else {
         camera.fov = 90;
-        camera.aspect_ratio = WINDOW_WIDTH / cast(float) WINDOW_HEIGHT;
+        camera.aspect_ratio = window_width / cast(float) window_height;
         camera.projection_matrix = make_projection_matrix(
             camera.fov * PI / 180.0,
             camera.aspect_ratio,

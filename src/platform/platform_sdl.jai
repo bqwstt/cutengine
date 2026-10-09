@@ -67,6 +67,13 @@ platform_poll_events :: (window: *Window, input: *Input)
 	}
 }
 
+platform_get_window_width :: (window: *Window) -> (u32, u32)
+{
+    window_width, window_height: s32;
+    SDL_GetWindowSizeInPixels(convert_to_sdl_window(window), *window_width, *window_height);
+    return cast(u32) window_width, cast(u32) window_height;
+}
+
 #scope_file
 
 convert_to_sdl_window :: inline (w: *Window) -> *SDL_Window
