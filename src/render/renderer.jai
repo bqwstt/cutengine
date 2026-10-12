@@ -12,6 +12,7 @@ renderer_init :: (window: *Window, backend: Backend_Kind, width: s32, height: s3
         if !ok  return .{}, false;
 
         ren.gpu_data = data;
+        ren.config = Render_Config.FLIP_V;
     }
 
     return ren, true;
@@ -80,6 +81,7 @@ Backend_Kind :: enum u32 {
 
 Renderer :: struct {
     window: *Window;
+    config: Render_Config;
 
     using data: Backend_Data;
     Backend_Data :: union backend: Backend_Kind {
@@ -121,6 +123,12 @@ Render_Setup :: struct {
     clear_color: Vector4;
     global_light_color: Vector4;
     view_projection: Matrix4;
+}
+
+Render_Config :: enum_flags u8 {
+    FLIP_Y;
+    FLIP_Z;
+    FLIP_V;
 }
 
 Draw_Indexed_Render_Command :: struct {
