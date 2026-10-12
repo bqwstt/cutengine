@@ -232,11 +232,9 @@ sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data,
 {
     frame, ok := renderer_begin_frame(window, data, list);
     if ok {
-        // Push camera uniform
-        SDL_PushGPUVertexUniformData(frame.command_buffer, 0, *list.setup.view_projection, size_of(Matrix4));
-
-        // Push light uniform
-        SDL_PushGPUFragmentUniformData(frame.command_buffer, 0, *list.setup.global_light_color, size_of(Vector4));
+        // Push uniforms
+        SDL_PushGPUVertexUniformData(frame.command_buffer, 0, *list.uniforms.camera, size_of(Render_Camera_Uniforms));
+        SDL_PushGPUFragmentUniformData(frame.command_buffer, 0, *list.uniforms.light, size_of(Render_Light_Uniforms));
 
         // Execute all commands
         for command: render_list_commands(list) {
@@ -256,7 +254,7 @@ sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data,
                 SDL_BindGPUVertexBuffers(frame.pass, 0, *vertex_binding, 1);
                 SDL_BindGPUIndexBuffer(frame.pass, *index_binding, SDL_GPUIndexElementSize._32BIT);
                 SDL_BindGPUFragmentSamplers(frame.pass, 0, *sampler_binding, 1);
-                SDL_PushGPUVertexUniformData(frame.command_buffer, 1, *cmd.transform, size_of(Matrix4));
+                SDL_PushGPUVertexUniformData(frame.command_buffer, 1, *cmd.uniforms, size_of(cmd.Uniforms));
                 SDL_DrawGPUIndexedPrimitives(frame.pass, xx mesh.indices.count, 1, 0, 0, 0);
             case .DRAW_INDEXED_INSTANCES;
                 cmd := command.draw_indexed_instances;
@@ -274,7 +272,7 @@ sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data,
                 SDL_BindGPUVertexStorageBuffers(frame.pass, 0, *data.instance_buffer, 1);
                 SDL_BindGPUIndexBuffer(frame.pass, *index_binding, SDL_GPUIndexElementSize._32BIT);
                 SDL_BindGPUFragmentSamplers(frame.pass, 0, *sampler_binding, 1);
-                SDL_PushGPUVertexUniformData(frame.command_buffer, 1, *cmd.transform, size_of(Matrix4));
+                SDL_PushGPUVertexUniformData(frame.command_buffer, 1, *cmd.uniforms, size_of(cmd.Uniforms));
                 SDL_DrawGPUIndexedPrimitives(frame.pass, xx mesh.indices.count, xx cmd.instances, 0, 0, 0);
             }
         }
@@ -354,7 +352,7 @@ renderer_begin_frame :: (window: *Window, data: *Gpu_Renderer_Data, list: *Rende
 
     cti: SDL_GPUColorTargetInfo;
     cti.texture = swapchain_texture;
-    cti.clear_color = cast,force(SDL_FColor) list.setup.clear_color;
+    cti.clear_color = cast,force(SDL_FColor) list.clear_color;
     cti.load_op = .CLEAR;
     cti.store_op = .STORE;
 

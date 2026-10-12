@@ -78,4 +78,9 @@ Color :: enum u32 {
     BLUE  :: 0xFF_00_00_FF;
 }
 
+Light_Source :: struct {
+    position: Vector3;
+    color:    Vector4;
+}
+
 #import "Math";

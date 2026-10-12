@@ -34,9 +34,9 @@ renderer_execute_commands :: (using ren: *Renderer, list: *Render_List)
     }
 }
 
-render_list_begin :: (list: *Render_List, setup: Render_Setup)
+render_list_begin :: (list: *Render_List, uniforms: Render_Uniforms)
 {
-    list.setup = setup;
+    list.uniforms = uniforms;
     reset(*list.commands);
     reset(*list.instances);
 }
@@ -53,7 +53,9 @@ render_draw_mesh :: (list: *Render_List, mesh: Mesh_Handle, transform: Matrix4)
     cmd := push_command(list, .DRAW_INDEXED);
     if !cmd  return;
 
-    cmd.draw_indexed = Draw_Indexed_Render_Command.{ mesh = mesh, transform = transform };
+    uniforms: Draw_Indexed_Render_Command.Uniforms;
+    uniforms.transform = transform;
+    cmd.draw_indexed = Draw_Indexed_Render_Command.{ mesh = mesh, uniforms = uniforms }; 
 }
 
 render_draw_mesh_instances :: (list: *Render_List, mesh: Mesh_Handle, transform: Matrix4, instances: []Render_Instance)
@@ -65,9 +67,11 @@ render_draw_mesh_instances :: (list: *Render_List, mesh: Mesh_Handle, transform:
     cmd := push_command(list, .DRAW_INDEXED_INSTANCES);
     if !cmd  return;
 
+    uniforms: Draw_Indexed_Instanced_Render_Command.Uniforms;
+    uniforms.transform = transform;
     cmd.draw_indexed_instances = Draw_Indexed_Instanced_Render_Command.{
         mesh = mesh,
-        transform = transform,
+        uniforms = uniforms,
         instances = instances.count
     };
 }
@@ -107,22 +111,36 @@ Render_Command :: struct {
 // @TODO: Not sure if I like to have this here.
 Render_Instance :: struct {
     position: Vector3;
-    _padding: float;
+    _padding: [1]u8;
 }
 // For instanced drawing, shaders use 16-bit aligned float4s, so we need to make sure our struct is 16 bytes as well.
-#assert size_of(Render_Instance) == 16;
+#assert size_of(Render_Instance) % 16 == 0;
 
 Render_List :: struct {
-    setup:     Render_Setup;
+    clear_color: Vector4;
+
+    uniforms:  Render_Uniforms;
     commands:  Fixed_Array(Render_Command, MAX_RENDER_COMMANDS);
     instances: Fixed_Array(Render_Instance, MAX_RENDER_INSTANCES);
 }
 
-// Per-frame data, mostly used to push uniforms
-Render_Setup :: struct {
-    clear_color: Vector4;
-    global_light_color: Vector4;
+// #region Render uniforms
+
+// All of the fields inside this struct will be accessible by the GPU,
+// so they must be 16-bit aligned.
+Render_Uniforms :: struct {
+    camera:   Render_Camera_Uniforms;
+    light:    Render_Light_Uniforms;
+    _padding: [1]u8;
+}
+#assert size_of(Render_Uniforms) % 16 == 0;
+
+Render_Camera_Uniforms :: struct {
     view_projection: Matrix4;
+}
+
+Render_Light_Uniforms :: struct {
+    global_light: Light_Source;
 }
 
 Render_Config :: enum_flags u8 {
@@ -133,7 +151,12 @@ Render_Config :: enum_flags u8 {
 
 Draw_Indexed_Render_Command :: struct {
     mesh: Mesh_Handle;
-    transform: Matrix4; // @TODO: Should this belong here?
+    uniforms: Uniforms;
+
+    #assert size_of(Uniforms) % 16 == 0;
+    Uniforms :: struct {
+        transform: Matrix4;
+    }
 }
 
 Draw_Indexed_Instanced_Render_Command :: struct {
