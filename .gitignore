@@ -3,3 +3,5 @@ build_debug/
 build_release/
 lib/
 assets/
+
+!assets/shader/src/*
