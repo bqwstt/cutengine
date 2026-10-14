@@ -118,10 +118,10 @@ TRANSIENT_MEMORY_SIZE ::  4 * GiB;
 #load "utils/fixed_array.jai";
 #load "platform/platform.jai";
 #load "platform/platform_sdl.jai"; // @FIXME: Load depending on platform wanted
+#load "engine/asset.jai";
 #load "engine/scene.jai";
 #load "engine/model.jai";
 #load "render/renderer.jai";
-// #load "game/game.jai";
-#load "game/boids.jai";
+#load "game/game.jai";
 
 #import "Basic"()(MEMORY_DEBUGGER = DEBUG); // Enable memory debugger on debug buids.
