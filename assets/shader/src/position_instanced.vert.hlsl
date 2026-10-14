@@ -1,6 +1,7 @@
 struct Input {
     float3 Position: TEXCOORD0;
-    float2 TexCoord: TEXCOORD1;
+    float3 Normal:   TEXCOORD1;
+    float2 TexCoord: TEXCOORD2;
     uint   InstanceIndex: SV_InstanceID;
 };
 
@@ -9,6 +10,8 @@ StructuredBuffer<float4> InstancePositions : register(t0, space0);
 struct Output {
     float2 TexCoord: TEXCOORD0;
     float4 ObjectColor: TEXCOORD1;
+    float3 Normal:      TEXCOORD2;
+    float3 CurrentPos:  TEXCOORD3;
     float4 Position: SV_Position;
 };
 
@@ -23,6 +26,8 @@ Output main(Input input)
     Output output;
     output.TexCoord = input.TexCoord;
     output.ObjectColor = float4(1.0, 1.0, 1.0, 1.0);
+    output.Normal = input.Normal;
+    output.CurrentPos = world;
     output.Position = mul(view_proj, world);
     return output;
 }

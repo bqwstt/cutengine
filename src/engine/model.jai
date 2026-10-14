@@ -1,6 +1,6 @@
 /// Load an .obj model from a filepath. Currently reads vertices (`v` components) and faces (`f` components).
 /// There is no support for vertex normals or materials.
-load_obj :: (path: string, config: Render_Config) -> []Mesh, bool
+load_obj :: (path: string, render_config: Render_Config) -> []Mesh, bool
 {
     original_allocator := context.allocator;
     context.allocator = context.per_frame_allocator;
@@ -38,7 +38,7 @@ load_obj :: (path: string, config: Render_Config) -> []Mesh, bool
             advance(*s, 3);
             u := parse_float(*s);
             v := parse_float(*s);
-            array_add(*texture_coords, .{ u, ifx config & .FLIP_V then 1-v else v });
+            array_add(*texture_coords, .{ u, ifx render_config & .FLIP_V then 1-v else v });
         } else if starts_with(s, "vn ") {
             // Normal coordinates (vn vn1 vn2 vn3)
             advance(*s, 3);
@@ -117,14 +117,17 @@ Handle :: struct($T: Type) {
     generation: u32;
 }
 
-Mesh_Handle    :: #type,distinct Handle(Mesh);
-Texture_Handle :: #type,distinct Handle(Texture);
+Mesh_Handle    :: #type Handle(Mesh);
+Texture_Handle :: #type Handle(Texture);
 
 Mesh :: struct {
     vertices: [..]Vertex;
     indices:  [..]u32;
-    // @FIXME: Not even sure we need this one right now
-    // textures: []Texture_Handle; // @TODO: Replace with handle-based container
+    material: Material;
+}
+
+Material :: struct {
+    albedo: Texture_Handle;
 }
 
 Vertex :: struct {

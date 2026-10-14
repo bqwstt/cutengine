@@ -21,6 +21,17 @@ sdl_gpu_renderer_make :: (window: *Window) -> Gpu_Renderer_Data, bool
         log_error("Couldn't enable VSync: %", SDL_GetErrorString());
     }
 
+    pixel_sampler_create_info := SDL_GPUSamplerCreateInfo.{
+        min_filter = .NEAREST,
+        mag_filter = .NEAREST,
+        mipmap_mode = .NEAREST,
+        address_mode_u = .CLAMP_TO_EDGE,
+        address_mode_v = .CLAMP_TO_EDGE,
+        address_mode_w = .CLAMP_TO_EDGE,
+    };
+    sampler := SDL_CreateGPUSampler(device, *pixel_sampler_create_info);
+    assert(sampler != null, "Couldn't create sampler: %", SDL_GetErrorString());
+
     pipeline := create_pipeline(sdl_window, device);
     instanced_pipeline := create_instanced_pipeline(sdl_window, device);
     if !pipeline || !instanced_pipeline {
@@ -41,6 +52,7 @@ sdl_gpu_renderer_make :: (window: *Window) -> Gpu_Renderer_Data, bool
     data: Gpu_Renderer_Data;
     data.device = device;
     data.pipeline = pipeline;
+    data.pixel_sampler = sampler;
     data.instanced_pipeline = instanced_pipeline;
     data.instance_buffer = instance_buffer;
     return data, true;
@@ -54,6 +66,89 @@ sdl_gpu_renderer_drop :: (window: *Window, data: *Gpu_Renderer_Data)
     SDL_ReleaseGPUBuffer(data.device, data.instance_buffer);
     SDL_ReleaseWindowFromGPUDevice(data.device, sdl_window);
     SDL_DestroyGPUDevice(data.device);
+}
+
+// @TODO: Change string to some other path or stuff from asset file
+sdl_gpu_upload_texture :: (data: *Gpu_Renderer_Data, path: string) -> Texture_Handle
+{
+    // Albedo (base) texture
+    surface := load_image(path);
+    if !surface {
+        log_error("Couldn't load texture image: %", SDL_GetErrorString());
+        return .{};
+    }
+    defer SDL_DestroySurface(surface);
+
+    // Convert surface to proper type for display
+    texture_image := SDL_ConvertSurface(surface, .RGBA32);
+    defer SDL_DestroySurface(texture_image);
+
+    tex_w := cast(u32) texture_image.w;
+    tex_h := cast(u32) texture_image.h;
+
+    // @TODO: Check format, may differ from albedo or other kinds of textures.
+    texture_create_info := SDL_GPUTextureCreateInfo.{
+        type = .SDL_GPU_TEXTURETYPE_2D,
+        format = .R8G8B8A8_UNORM,
+        usage = SDL_GPU_TEXTUREUSAGE_SAMPLER,
+        width = tex_w,
+        height = tex_h,
+        layer_count_or_depth = 1,
+        num_levels = 1,
+    };
+    texture := SDL_CreateGPUTexture(data.device, *texture_create_info);
+    assert(texture != null, "Couldn't create texture: %", SDL_GetErrorString());
+
+    transfer_buffer_info := SDL_GPUTransferBufferCreateInfo.{
+        usage = .UPLOAD,
+        size = tex_w * tex_h * 4
+    };
+    transfer_buffer := SDL_CreateGPUTransferBuffer(data.device, *transfer_buffer_info);
+    assert(transfer_buffer != null, "Couldn't create texture transfer buffer: %", SDL_GetErrorString());
+    defer SDL_ReleaseGPUTransferBuffer(data.device, transfer_buffer);
+
+    // Map texture transfer buffer and texture into it
+    transfer_data: *u8 = SDL_MapGPUTransferBuffer(data.device, transfer_buffer, false);
+    assert(transfer_data != null, "Couldn't map texture transfer buffer: %", SDL_GetErrorString());
+
+    // Copy texture
+    memcpy(transfer_data, texture_image.pixels, tex_w * tex_h * 4);
+
+    SDL_UnmapGPUTransferBuffer(data.device, transfer_buffer);
+
+    upload_cmd_buf := SDL_AcquireGPUCommandBuffer(data.device);
+    assert(upload_cmd_buf != null, "Couldn't acquire GPU command buffer: %", SDL_GetErrorString());
+
+    // Copy pass: use command buffer to send the data via the transfer buffer
+    copy_pass := SDL_BeginGPUCopyPass(upload_cmd_buf);
+    {
+        // Texture (from)
+        from := SDL_GPUTextureTransferInfo.{
+            transfer_buffer = transfer_buffer,
+            offset = 0,
+        };
+
+        // Texture (to)
+        to := SDL_GPUTextureRegion.{
+            texture = texture,
+            w = tex_w,
+            h = tex_h,
+            d = 1
+        };
+
+        SDL_UploadToGPUTexture(copy_pass, *from, *to, false);
+    }
+    SDL_EndGPUCopyPass(copy_pass);
+
+    ok := SDL_SubmitGPUCommandBuffer(upload_cmd_buf);
+    assert(ok, "Couldn't submit GPU command buffer: %", SDL_GetErrorString());
+
+    gpu_texture: Gpu_Texture;
+    gpu_texture.handle.index = xx data.textures.count;
+    gpu_texture.handle.generation = 1;
+    gpu_texture.texture = texture;
+    push(*data.textures, gpu_texture);
+    return gpu_texture.handle;
 }
 
 sdl_gpu_upload_mesh :: (data: *Gpu_Renderer_Data, mesh_data: Mesh) -> Mesh_Handle
@@ -103,129 +198,57 @@ sdl_gpu_upload_mesh :: (data: *Gpu_Renderer_Data, mesh_data: Mesh) -> Mesh_Handl
 
     SDL_UnmapGPUTransferBuffer(data.device, transfer_buffer);
 
-    // Create texture
-    surface := load_image("stone.png");
-    if !surface {
-        log_error("Couldn't load texture image: %", SDL_GetErrorString());
-        return .{};
-    }
-    defer SDL_DestroySurface(surface);
-
-    texture_image := SDL_ConvertSurface(surface, .RGBA32);
-    defer SDL_DestroySurface(texture_image);
-
-    tex_w := cast(u32) texture_image.w;
-    tex_h := cast(u32) texture_image.h;
-
-    texture_create_info := SDL_GPUTextureCreateInfo.{
-        type = .SDL_GPU_TEXTURETYPE_2D,
-        format = .R8G8B8A8_UNORM,
-        usage = SDL_GPU_TEXTUREUSAGE_SAMPLER,
-        width = tex_w,
-        height = tex_h,
-        layer_count_or_depth = 1,
-        num_levels = 1,
-    };
-    texture := SDL_CreateGPUTexture(data.device, *texture_create_info);
-    assert(texture != null, "Couldn't create texture: %", SDL_GetErrorString());
-    SDL_SetGPUTextureName(data.device, texture, "boid");
-
-    texture_transfer_buffer_info := SDL_GPUTransferBufferCreateInfo.{
-        usage = .UPLOAD,
-        size = tex_w * tex_h * 4
-    };
-    texture_transfer_buffer := SDL_CreateGPUTransferBuffer(data.device, *texture_transfer_buffer_info);
-    assert(texture_transfer_buffer != null, "Couldn't create texture transfer buffer: %", SDL_GetErrorString());
-    defer SDL_ReleaseGPUTransferBuffer(data.device, texture_transfer_buffer);
-
-    // Map texture transfer buffer and texture into it
-    texture_transfer_data: *u8 = SDL_MapGPUTransferBuffer(data.device, texture_transfer_buffer, false);
-    assert(texture_transfer_data != null, "Couldn't map texture transfer buffer: %", SDL_GetErrorString());
-
-    // Copy texture
-    memcpy(texture_transfer_data, texture_image.pixels, tex_w * tex_h * 4);
-
-    SDL_UnmapGPUTransferBuffer(data.device, texture_transfer_buffer);
-
-    sampler_create_info := SDL_GPUSamplerCreateInfo.{
-        min_filter = .NEAREST,
-        mag_filter = .NEAREST,
-        mipmap_mode = .NEAREST,
-        address_mode_u = .CLAMP_TO_EDGE,
-        address_mode_v = .CLAMP_TO_EDGE,
-        address_mode_w = .CLAMP_TO_EDGE,
-    };
-    sampler := SDL_CreateGPUSampler(data.device, *sampler_create_info);
-    assert(sampler != null, "Couldn't create sampler: %", SDL_GetErrorString());
-
     upload_cmd_buf := SDL_AcquireGPUCommandBuffer(data.device);
     assert(upload_cmd_buf != null, "Couldn't acquire GPU command buffer: %", SDL_GetErrorString());
 
     // Copy pass: use command buffer to send the data via the transfer buffer
     copy_pass := SDL_BeginGPUCopyPass(upload_cmd_buf);
+    {
+        // Vertices (from)
+        vertex_buffer_from := SDL_GPUTransferBufferLocation.{
+            transfer_buffer = transfer_buffer,
+            offset = 0
+        };
 
-    // Position (from)
-    vertex_buffer_from := SDL_GPUTransferBufferLocation.{
-        transfer_buffer = transfer_buffer,
-        offset = 0
-    };
+        index_buffer_from := SDL_GPUTransferBufferLocation.{
+            transfer_buffer = transfer_buffer,
+            offset = vertices_size // offset by previous vertices
+        };
 
-    index_buffer_from := SDL_GPUTransferBufferLocation.{
-        transfer_buffer = transfer_buffer,
-        offset = vertices_size // offset by previous vertices
-    };
+        // Vertices (to)
+        vertex_buffer_to := SDL_GPUBufferRegion.{
+            buffer = vertex_buffer,
+            offset = 0,
+            size = vertices_size,
+        };
 
-    // Position (to)
-    vertex_buffer_to := SDL_GPUBufferRegion.{
-        buffer = vertex_buffer,
-        offset = 0,
-        size = vertices_size,
-    };
+        index_buffer_to := SDL_GPUBufferRegion.{
+            buffer = index_buffer,
+            offset = 0,
+            size = indices_size,
+        };
 
-    index_buffer_to := SDL_GPUBufferRegion.{
-        buffer = index_buffer,
-        offset = 0,
-        size = indices_size,
-    };
-
-    // Texture (from)
-    texture_buffer_from := SDL_GPUTextureTransferInfo.{
-        transfer_buffer = texture_transfer_buffer,
-        offset = 0,
-    };
-
-    // Texture (to)
-    texture_buffer_to := SDL_GPUTextureRegion.{
-        texture = texture,
-        w = tex_w,
-        h = tex_h,
-        d = 1
-    };
-
-    // Perform the copy and submit the command to the command buffer
-    SDL_UploadToGPUBuffer(copy_pass, *vertex_buffer_from, *vertex_buffer_to, false);
-    SDL_UploadToGPUBuffer(copy_pass, *index_buffer_from, *index_buffer_to, false);
-    SDL_UploadToGPUTexture(copy_pass, *texture_buffer_from, *texture_buffer_to, false);
-
+        // Perform the copy and submit the command to the command buffer
+        SDL_UploadToGPUBuffer(copy_pass, *vertex_buffer_from, *vertex_buffer_to, false);
+        SDL_UploadToGPUBuffer(copy_pass, *index_buffer_from, *index_buffer_to, false);
+    }
     SDL_EndGPUCopyPass(copy_pass);
 
     ok := SDL_SubmitGPUCommandBuffer(upload_cmd_buf);
     assert(ok, "Couldn't submit GPU command buffer: %", SDL_GetErrorString());
 
-    // @FIXME: Fill in actual textures
-    textures := Texture_Handle.[];
+    gpu_mesh: Gpu_Mesh;
+    gpu_mesh.m = mesh_data;
+    gpu_mesh.vertex_buffer = vertex_buffer;
+    gpu_mesh.index_buffer  = index_buffer;
+    gpu_mesh.handle.index = xx data.meshes.count;
+    gpu_mesh.handle.generation = 1;
+    // Populate the textures to use here ...
+    // For now, use the only one we have.
+    push(*gpu_mesh.textures, Texture_Handle.{ 0, 1 });
 
-    m: Gpu_Mesh;
-    m.m = mesh_data;
-    m.vertex_buffer = vertex_buffer;
-    m.index_buffer  = index_buffer;
-    m.sampler = sampler;
-    m.texture = texture;
-    m.handle.index = xx data.meshes.count;
-    m.handle.generation = 1;
-
-    push(*data.meshes, m);
-    return m.handle;
+    push(*data.meshes, gpu_mesh);
+    return gpu_mesh.handle;
 }
 
 sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data, list: *Render_List)
@@ -243,35 +266,52 @@ sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data,
                 cmd := command.draw_indexed;
 
                 // Grab GPU mesh and bind buffers and samplers
-                mesh := get_gpu_mesh(data, cmd.mesh);
+                mesh := get_gpu_resource(data, Gpu_Mesh, cmd.mesh);
                 if !mesh  continue;
 
                 vertex_binding  := SDL_GPUBufferBinding.{ buffer = mesh.vertex_buffer, offset = 0 };
                 index_binding   := SDL_GPUBufferBinding.{ buffer = mesh.index_buffer, offset = 0 };
-                sampler_binding := SDL_GPUTextureSamplerBinding.{ texture = mesh.texture, sampler = mesh.sampler };
+                // sampler_binding := SDL_GPUTextureSamplerBinding.{ texture = mesh.texture, sampler = mesh.sampler };
+
+                albedo := get_gpu_resource(data, Gpu_Texture, Texture_Handle.{ 0, 1 });
+                sampler_bindings := SDL_GPUTextureSamplerBinding.[
+                    .{
+                        texture = albedo.texture,
+                        sampler = data.pixel_sampler
+                    },
+                ];
 
                 SDL_BindGPUGraphicsPipeline(frame.pass, data.pipeline);
                 SDL_BindGPUVertexBuffers(frame.pass, 0, *vertex_binding, 1);
                 SDL_BindGPUIndexBuffer(frame.pass, *index_binding, SDL_GPUIndexElementSize._32BIT);
-                SDL_BindGPUFragmentSamplers(frame.pass, 0, *sampler_binding, 1);
+                SDL_BindGPUFragmentSamplers(frame.pass, 0, sampler_bindings.data, 1);
                 SDL_PushGPUVertexUniformData(frame.command_buffer, 1, *cmd.uniforms, size_of(cmd.Uniforms));
                 SDL_DrawGPUIndexedPrimitives(frame.pass, xx mesh.indices.count, 1, 0, 0, 0);
             case .DRAW_INDEXED_INSTANCES;
                 cmd := command.draw_indexed_instances;
 
                 // Grab GPU mesh and bind buffers and samplers
-                mesh := get_gpu_mesh(data, cmd.mesh);
+                mesh := get_gpu_resource(data, Gpu_Mesh, cmd.mesh);
                 if !mesh  continue;
 
                 vertex_binding  := SDL_GPUBufferBinding.{ buffer = mesh.vertex_buffer, offset = 0 };
                 index_binding   := SDL_GPUBufferBinding.{ buffer = mesh.index_buffer, offset = 0 };
-                sampler_binding := SDL_GPUTextureSamplerBinding.{ texture = mesh.texture, sampler = mesh.sampler };
+                // sampler_binding := SDL_GPUTextureSamplerBinding.{ texture = mesh.texture, sampler = mesh.sampler };
+
+                albedo := get_gpu_resource(data, Gpu_Texture, Texture_Handle.{ 0, 1 });
+                sampler_bindings := SDL_GPUTextureSamplerBinding.[
+                    .{
+                        texture = albedo.texture,
+                        sampler = data.pixel_sampler
+                    },
+                ];
 
                 SDL_BindGPUGraphicsPipeline(frame.pass, data.instanced_pipeline);
                 SDL_BindGPUVertexBuffers(frame.pass, 0, *vertex_binding, 1);
                 SDL_BindGPUVertexStorageBuffers(frame.pass, 0, *data.instance_buffer, 1);
                 SDL_BindGPUIndexBuffer(frame.pass, *index_binding, SDL_GPUIndexElementSize._32BIT);
-                SDL_BindGPUFragmentSamplers(frame.pass, 0, *sampler_binding, 1);
+                // SDL_BindGPUFragmentSamplers(frame.pass, 0, *sampler_binding, 1);
+                SDL_BindGPUFragmentSamplers(frame.pass, 0, sampler_bindings.data, 1);
                 SDL_PushGPUVertexUniformData(frame.command_buffer, 1, *cmd.uniforms, size_of(cmd.Uniforms));
                 SDL_DrawGPUIndexedPrimitives(frame.pass, xx mesh.indices.count, xx cmd.instances, 0, 0, 0);
             }
@@ -289,11 +329,13 @@ Gpu_Renderer_Data :: struct {
     depth_texture:    *SDL_GPUTexture;
     depth_w, depth_h: u32;
 
+    pixel_sampler: *SDL_GPUSampler;
+
     instance_buffer: *SDL_GPUBuffer;
 
-    // @TODO: Is this the right place to store meshes?
-    // @TODO: Change in favor of Handle_Array type
-    meshes: Fixed_Array(Gpu_Mesh, 64);
+    // @TODO: Change in favor of Handle_Array type, remove fixed array
+    meshes:   Fixed_Array(Gpu_Mesh, 64);
+    textures: Fixed_Array(Gpu_Texture, 12);
 }
 
 #scope_file
@@ -369,14 +411,23 @@ renderer_end_frame :: (frame: *Renderer_Frame)
     assert(ok, "Couldn't submit command buffer to GPU: %", SDL_GetErrorString());
 }
 
-get_gpu_mesh :: (data: *Gpu_Renderer_Data, handle: Mesh_Handle) -> *Gpu_Mesh
+// `$T` refers to a Handle object.
+// `$R` refers to the actual resource which *holds* a handle inside itself (in order to match generation)
+// @TODO: Remove `/interface Handle` once moved to a Handle-based array.
+get_gpu_resource :: (data: *Gpu_Renderer_Data, $R: Type, handle: Handle) -> *R
 {
     // Check handle before returning ref
     if handle.index >= data.meshes.count  return null;
-    mesh := *data.meshes.data[handle.index];
-    if mesh.handle.generation != handle.generation  return null;
 
-    return mesh;
+    resource: *R;
+    #if R == Gpu_Mesh {
+        resource = *data.meshes.data[handle.index];
+    } else {
+        resource = *data.textures.data[handle.index];
+    }
+    if resource.handle.generation != handle.generation  return null;
+
+    return resource;
 }
 
 upload_instance_data :: (data: *Gpu_Renderer_Data, instances: []Render_Instance)
@@ -620,7 +671,11 @@ mesh_drop :: (renderer: *Gpu_Renderer_Data, m: *Gpu_Mesh)
     SDL_ReleaseGPUBuffer(renderer.device, m.vertex_buffer);
     SDL_ReleaseGPUBuffer(renderer.device, m.index_buffer);
     SDL_ReleaseGPUSampler(renderer.device, m.sampler);
-    SDL_ReleaseGPUTexture(renderer.device, m.texture);
+
+    for texture: m.textures.data {
+        gpu_texture := get_gpu_resource(renderer, Gpu_Texture, texture);
+        SDL_ReleaseGPUTexture(renderer.device, gpu_texture.texture);
+    }
 }
 
 // @FIXME: For now, until I think how to overlap the two layers together, this is
@@ -641,17 +696,18 @@ Renderer_Frame :: struct {
 Gpu_Mesh :: struct {
     using #as m: Mesh;
 
-    handle: Mesh_Handle;
+    handle: Mesh_Handle;  // @TODO: Move it to a Handle array? This is used to check generation.
 
     vertex_buffer: *SDL_GPUBuffer;
-    index_buffer: *SDL_GPUBuffer;
+    index_buffer:  *SDL_GPUBuffer;
 
-    sampler: *SDL_GPUSampler;
-    texture: *SDL_GPUTexture;
+    sampler:  *SDL_GPUSampler;
+    textures: Fixed_Array(Texture_Handle, 6);
 }
 
 Gpu_Texture :: struct {
-    handle: *SDL_GPUTexture;
+    handle:  Texture_Handle; // @TODO: Move it to a Handle array? This is used to check generation.
+    texture: *SDL_GPUTexture;
 }
 
 // What am I going to send?
