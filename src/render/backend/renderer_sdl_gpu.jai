@@ -64,6 +64,11 @@ sdl_gpu_renderer_drop :: (window: *Window, data: *Gpu_Renderer_Data)
     SDL_ReleaseGPUGraphicsPipeline(data.device, data.pipeline);
     SDL_ReleaseGPUGraphicsPipeline(data.device, data.instanced_pipeline);
     SDL_ReleaseGPUBuffer(data.device, data.instance_buffer);
+    SDL_ReleaseGPUSampler(data.device, data.pixel_sampler);
+
+    for * data.textures.data  SDL_ReleaseGPUTexture(data.device, it.texture);
+    for * data.meshes.data  mesh_drop(data, it);
+
     SDL_ReleaseWindowFromGPUDevice(data.device, sdl_window);
     SDL_DestroyGPUDevice(data.device);
 }
@@ -244,9 +249,6 @@ sdl_gpu_upload_mesh :: (data: *Gpu_Renderer_Data, mesh_data: Cpu_Mesh) -> Mesh_H
     gpu_mesh.index_count   = xx indices.count;
     gpu_mesh.handle.index = xx data.meshes.count;
     gpu_mesh.handle.generation = 1;
-    // Populate the textures to use here ...
-    // For now, use the only one we have.
-    push(*gpu_mesh.textures, Texture_Handle.{ 0, 1 });
 
     push(*data.meshes, gpu_mesh);
     return gpu_mesh.handle;
@@ -674,12 +676,6 @@ mesh_drop :: (renderer: *Gpu_Renderer_Data, m: *Gpu_Mesh)
 {
     SDL_ReleaseGPUBuffer(renderer.device, m.vertex_buffer);
     SDL_ReleaseGPUBuffer(renderer.device, m.index_buffer);
-    SDL_ReleaseGPUSampler(renderer.device, m.sampler);
-
-    for texture: m.textures.data {
-        gpu_texture := get_gpu_resource(renderer, Gpu_Texture, texture);
-        SDL_ReleaseGPUTexture(renderer.device, gpu_texture.texture);
-    }
 }
 
 // @FIXME: For now, until I think how to overlap the two layers together, this is
@@ -703,9 +699,6 @@ Gpu_Mesh :: struct {
     vertex_buffer: *SDL_GPUBuffer;
     index_buffer:  *SDL_GPUBuffer;
     index_count:   u32;
-
-    sampler:  *SDL_GPUSampler;
-    textures: Fixed_Array(Texture_Handle, 6);
 }
 
 Gpu_Texture :: struct {
