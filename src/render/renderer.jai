@@ -41,12 +41,17 @@ render_list_begin :: (list: *Render_List, uniforms: Render_Uniforms)
     reset(*list.instances);
 }
 
+renderer_upload_texture :: (using ren: *Renderer, path: string) -> Texture_Handle
+{
+    if #complete backend == {
+    case .SDL_GPU; return sdl_gpu_upload_texture(*gpu_data, path);
+    }
+}
+
 renderer_upload_mesh :: (using ren: *Renderer, mesh: Mesh) -> Mesh_Handle
 {
     if #complete backend == {
-    case .SDL_GPU;
-        sdl_gpu_upload_texture(*gpu_data, "colormap.png");
-        return sdl_gpu_upload_mesh(*gpu_data, mesh);
+    case .SDL_GPU; return sdl_gpu_upload_mesh(*gpu_data, mesh);
     }
 }
 
