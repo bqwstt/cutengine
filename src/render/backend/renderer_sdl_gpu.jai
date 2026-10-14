@@ -552,8 +552,18 @@ create_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice) -> *SDL_GPUGrap
     assert(fragment_shader != null, "Couldn't create fragment shader: %", SDL_GetErrorString());
     defer SDL_ReleaseGPUShader(device, fragment_shader);
 
-    color_target_description := SDL_GPUColorTargetDescription.[
-        .{ format = SDL_GetGPUSwapchainTextureFormat(device, window) }
+    color_target_description := SDL_GPUColorTargetDescription.[.{
+            format = SDL_GetGPUSwapchainTextureFormat(device, window),
+            blend_state = {
+                enable_blend = true,
+                color_blend_op = .ADD,
+                alpha_blend_op = .ADD,
+                src_color_blendfactor = .SRC_ALPHA,
+                dst_color_blendfactor = .ONE_MINUS_SRC_ALPHA,
+                src_alpha_blendfactor = .SRC_ALPHA,
+                dst_alpha_blendfactor = .ONE_MINUS_SRC_ALPHA,
+            }
+        }
     ];
 
     // Create pipeline info:

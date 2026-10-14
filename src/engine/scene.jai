@@ -80,6 +80,7 @@ Color :: enum u32 {
 
 Light_Source :: struct {
     position: Vector3;
+    _padding: [1]u8;   // Have to add some padding so that shader reads color correctly after
     color:    Vector4;
 }
 

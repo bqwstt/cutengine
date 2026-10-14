@@ -25,8 +25,9 @@ Output main(Input input)
     float3 light_direction = normalize(Light.Pos - input.CurrentPos);
 
     float diffuse = max(dot(normal, light_direction), 0.0f);
+    float4 base_color = Texture.Sample(Sampler, input.TexCoord) * input.ObjectColor;
 
     Output output;
-    output.Color = Texture.Sample(Sampler, input.TexCoord) * diffuse * Light.Color * input.ObjectColor;
+    output.Color = float4(base_color.rgb * diffuse * Light.Color.rgb, base_color.a);
     return output;
 }

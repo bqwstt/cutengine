@@ -138,7 +138,6 @@ Render_List :: struct {
 Render_Uniforms :: struct {
     camera:   Render_Camera_Uniforms;
     light:    Render_Light_Uniforms;
-    _padding: [1]u8;
 }
 #assert size_of(Render_Uniforms) % 16 == 0;
 
