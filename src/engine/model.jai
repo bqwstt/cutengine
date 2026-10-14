@@ -1,6 +1,89 @@
+// @TODO: This should really be parsing a packed array of bytes, not a human-readable string.
+load_asset :: (asset: string, render_config: Render_Config) -> Cpu_Model, bool
+{
+    original_allocator := context.allocator;
+    context.allocator = context.per_frame_allocator;
+    defer context.allocator = original_allocator;
+
+    // @TODO: Remove SDL from here.
+    assets_path := path_join(to_string(SDL_GetBasePath()), "../assets/") ;
+    full_path := path_join(assets_path, asset);
+    file, ok := read_entire_file(full_path);
+    if !ok {
+        log_error("Couldn't load model from '%'", asset);
+        return .{}, false;
+    }
+
+    albedo_path: string;
+    model_path:  string;
+
+    for line: split(file, "\n") {
+        trimmed := trim(line);
+
+        if      starts_with(trimmed, "albedo") albedo_path = path_join(assets_path, quoted_value(trimmed));
+        else if starts_with(trimmed, "path")   model_path  = path_join(assets_path, quoted_value(trimmed));
+    }
+
+    albedo_surface := SDL_LoadPNG(to_c_string(albedo_path));
+    albedo: Cpu_Texture;
+    albedo.width  = xx albedo_surface.w;
+    albedo.height = xx albedo_surface.h;
+    albedo.pixels = albedo_surface.pixels;
+    albedo.pitch  = xx albedo_surface.pitch;
+
+    model: Cpu_Model;
+    model.meshes = load_obj(model_path, render_config);
+    model.material = Material.{ albedo = albedo }; // @TODO: Remove and actually read the pixels.
+    return model, true;
+}
+
+// #region Handles
+
+Handle :: struct($T: Type) {
+    index: u32;
+    generation: u32;
+}
+
+Mesh_Handle    :: #type Handle(Cpu_Mesh);
+Texture_Handle :: #type Handle(Cpu_Texture);
+
+// #region CPU-side data
+// Not sure if I like the name "Cpu_<...>" but they show intent!
+
+Cpu_Mesh :: struct {
+    vertices: []Vertex;
+    indices:  []u32;
+    material: Material;
+}
+
+Cpu_Texture :: struct {
+    width:  u32;
+    height: u32;
+    pixels: *u8;
+    pitch:  u32;
+}
+
+Cpu_Model :: struct {
+    meshes:   []Cpu_Mesh;
+    material: Material;
+}
+
+// @FIXME: Should these be called "Cpu_<...>"? :)
+Material :: struct {
+    albedo: Cpu_Texture;
+}
+
+Vertex :: struct {
+    position:       Vector3;
+    normal:         Vector3;
+    texture_coords: Vector2;
+}
+
+#scope_file
+
 /// Load an .obj model from a filepath. Currently reads vertices (`v` components) and faces (`f` components).
 /// There is no support for vertex normals or materials.
-load_obj :: (path: string, render_config: Render_Config) -> []Mesh, bool
+load_obj :: (path: string, render_config: Render_Config) -> []Cpu_Mesh, bool
 {
     original_allocator := context.allocator;
     context.allocator = context.per_frame_allocator;
@@ -12,13 +95,10 @@ load_obj :: (path: string, render_config: Render_Config) -> []Mesh, bool
         return .{}, false;
     }
 
-    meshes: [..]Mesh;
-
     positions: [..]Vector3;
     normals:   [..]Vector3;
     texture_coords: [..]Vector2;
 
-    vertices: [..]Vertex;
     faces:    [..]Face;
 
     // @TODO: Profile
@@ -71,7 +151,10 @@ load_obj :: (path: string, render_config: Render_Config) -> []Mesh, bool
         }
     }
 
-    m: Mesh;
+    vertices: [..]Vertex;
+    indices:  [..]u32;
+
+    m: Cpu_Mesh;
     for face: faces {
         // f 2/1/1 3/2/1 4/3/1
         for i: 0..2 {
@@ -86,7 +169,7 @@ load_obj :: (path: string, render_config: Render_Config) -> []Mesh, bool
             // Reuse an identical vertex if we already added one
             // @FIXME: This probably is slow.
             found := -1;
-            for existing, idx: m.vertices {
+            for existing, idx: vertices {
                 if existing.position == v.position
                     && existing.normal == v.normal
                     && existing.texture_coords == v.texture_coords
@@ -97,50 +180,30 @@ load_obj :: (path: string, render_config: Render_Config) -> []Mesh, bool
             }
 
             if found >= 0 {
-                array_add(*m.indices, cast(u32) found);
+                array_add(*indices, cast(u32) found);
             } else {
-                array_add(*m.indices, cast(u32) m.vertices.count);  // index of the vertex we're about to add
-                array_add(*m.vertices, v);
+                array_add(*indices, cast(u32) vertices.count);  // index of the vertex we're about to add
+                array_add(*vertices, v);
             }
         }
     }
+
+    meshes: [..]Cpu_Mesh;
+    m.vertices = vertices;
+    m.indices  = indices;
 
     // Copy temporary data to transient memory
     array_add(*meshes, m,, context.transient_allocator);
     return meshes, true;
 }
 
-Texture :: struct {}
-
-Handle :: struct($T: Type) {
-    index: u32;
-    generation: u32;
+// @TODO: Remove
+quoted_value :: (line: string) -> string {
+    first := find_index_from_left (line, #char "\"");
+    last  := find_index_from_right(line, #char "\"");
+    if first < 0 || last <= first return "";
+    return slice(line, first + 1, last - first - 1);
 }
-
-Mesh_Handle    :: #type Handle(Mesh);
-Texture_Handle :: #type Handle(Texture);
-
-Mesh :: struct {
-    vertices: [..]Vertex;
-    indices:  [..]u32;
-    material: Material;
-}
-
-Material :: struct {
-    albedo: Texture_Handle;
-}
-
-Vertex :: struct {
-    position: Vector3;
-    normal: Vector3;
-    texture_coords: Vector2;
-}
-
-Model :: struct {
-    meshes: [..]Mesh_Handle;
-}
-
-#scope_file
 
 Face :: struct {
     indices:  [3]u32;

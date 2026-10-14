@@ -1,9 +1,14 @@
 game_init :: (state: *Game_State, renderer: *Renderer)
 {
-    state.camera = camera_make();
+    state.camera = camera_make(renderer.window);
+    state.light.position = Vector3.{ 10, 10, 10 };
 
-    // Upload sample mesh
-    state.obj.mesh = renderer_upload_mesh(renderer, Mesh.{ VERTICES, INDICES });
+    tent_asset, ok := load_asset("tent.ca", renderer.config);
+    assert(ok, "Failed to load asset");
+
+    tent_model := load_model(renderer, tent_asset);
+    state.light.model = tent_model;
+    state.obj.model   = tent_model;
 
     camera_move(*state.camera, .{ 0, 0, 1 }); // Move the camera a bit back
 }
@@ -13,33 +18,72 @@ game_init :: (state: *Game_State, renderer: *Renderer)
 /// code that will execute these commands in their own layer.
 game_construct_render_list :: (list: *Render_List, prev_state: *Game_State, curr_state: *Game_State, alpha: float64)
 {
-    view_proj := curr_state.camera.projection_matrix * curr_state.camera.view_matrix;
-    render_list_begin(list, view_proj);
+    uniforms: Render_Uniforms;
+    uniforms.camera.view_projection = curr_state.camera.projection_matrix * curr_state.camera.view_matrix;
+    uniforms.light.global_light.color = Vector4.{ 1.0, 1.0, 1.0, 1.0 };
+    uniforms.light.global_light.position = curr_state.light.position;
+
+    render_list_begin(list, uniforms);
 
     obj: Object;
+    light: Object;
 
     // Lerp values
     // @TODO: If this grows to lots of lerps, it might be useful to have a utility that automatically adds lerp calls for us.
     t := cast(float) alpha;
-    obj.mesh = curr_state.obj.mesh;
+    obj.model = curr_state.obj.model;
     obj.position =  lerp(prev_state.obj.position, curr_state.obj.position, t);
     obj.rotation = nlerp(prev_state.obj.rotation, curr_state.obj.rotation, t);
     obj.scale    =  lerp(prev_state.obj.scale, curr_state.obj.scale, t);
+
+    light.model = curr_state.light.model;
+    light.position = lerp(prev_state.light.position, curr_state.light.position, t);
+    light.rotation = nlerp(prev_state.light.rotation, curr_state.light.rotation, t);
+    light.scale = lerp(prev_state.light.scale, curr_state.light.scale, t);
+
+    render_draw_object(list, *light); // Draw light source (a cube)
     render_draw_object(list, *obj);
 }
 
 game_update :: (state: *Game_State, input: *Input, dt: float64)
 {
-    camera_move(*state.camera, .{ 0, 0, 0.01 });
+    if key_is_down(input, .A)  camera_move(*state.camera, .{ cast(float) -dt, 0, 0 });
+    if key_is_down(input, .D)  camera_move(*state.camera, .{ cast(float)  dt, 0, 0 });
+    if key_is_down(input, .W)  camera_move(*state.camera, .{ 0, cast(float)  dt, 0 });
+    if key_is_down(input, .S)  camera_move(*state.camera, .{ 0, cast(float) -dt, 0 });
 
-    // @TODO: Test code, remove
-    state.obj.spin_angle += 4.0 * cast(float) dt;
-    set_from_axis_and_angle(*state.obj.rotation, 1, 1, 1, state.obj.spin_angle);
+    state.light_angle += cast(float) dt;
+    state.light.position.x = state.obj.position.x + 8.0 * cos(state.light_angle);
+    state.light.position.y = state.obj.position.y + 5.0;
+    state.light.position.z = state.obj.position.z + 8.0 * sin(state.light_angle);
+
+    ROTATION_SPEED :: 0.6;
+
+    if mouse_was_pressed(input, .RIGHT_CLICK)   state.dragging = true;
+    if mouse_was_released(input, .RIGHT_CLICK)  state.dragging = false;
+
+    if state.dragging {
+        fdt := cast(float) dt;
+        dx := input.mouse_delta.x;
+        dy := input.mouse_delta.y;
+        if abs(dx) < 0.7  dx = 0.0;
+        if abs(dy) < 0.7  dy = 0.0;
+
+        x := ROTATION_SPEED * dx * fdt;
+        y := ROTATION_SPEED * dy * fdt;
+        camera_rotate(*state.camera, .{ x, y });
+    }
+
+    camera_move(*state.camera, .{ 0, 0, input.mouse_scroll_wheel * cast(float) dt });
 }
 
 Game_State :: struct {
     camera: Camera;
     obj: Object;
+    dragging: bool;
+
+    light: Object;
+    light_angle: float;
 }
 
 #scope_file
@@ -47,19 +91,34 @@ Game_State :: struct {
 render_draw_object :: (list: *Render_List, using obj: *Object)
 {
     transform := make_translation_matrix4(position) * rotation_matrix(Matrix4, rotation) * make_scale_matrix4(scale);
-    render_draw_mesh(list, mesh, transform);
+    for model.meshes {
+        render_draw_mesh(list, it, transform);
+    }
 }
 
-// @TODO: Test code, remove
-VERTICES :: Vertex.[
-    //       Position (NDC)                   Texture (UV)
-    Vertex.{ position = .{ -0.5, -0.5, 0.0 }, texture_coords = .{ 0, 1 } }, // Bottom-left
-    Vertex.{ position = .{  0.5, -0.5, 0.0 }, texture_coords = .{ 1, 1 } }, // Bottom-right
-    Vertex.{ position = .{ -0.5,  0.5, 0.0 }, texture_coords = .{ 0, 0 } }, // Top-left
-    Vertex.{ position = .{  0.5,  0.5, 0.0 }, texture_coords = .{ 1, 0 } }  // Top-right
-];
+load_model :: (renderer: *Renderer, model: Cpu_Model) -> Model
+{
+    meshes: [..]Mesh_Handle;
+    array_reserve(*meshes, model.meshes.count);
 
-INDICES :: u32.[
-    0, 1, 2, // Face 1: Bottom-left -> Bottom-right -> Top-left
-    1, 3, 2  // Face 2: Bottom-right -> Top-right -> Top-left
-];
+    renderer_load_texture(renderer, model.material.albedo);
+    for mesh: model.meshes {
+        mesh_handle := renderer_load_mesh(renderer, mesh);
+        array_add(*meshes, mesh_handle,, context.transient_allocator);
+    }
+
+    return Model.{ meshes = meshes };
+}
+
+Model :: struct {
+    meshes: []Mesh_Handle;
+}
+
+// @TEST: One-off entity for drawing. In general, shouldn't be used for drawing things.
+Object :: struct {
+    model: Model;
+
+    position: Vector3;
+    rotation: Quaternion;
+    scale:    Vector3 = .{ 1, 1, 1 };
+}

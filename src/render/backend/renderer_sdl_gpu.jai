@@ -69,18 +69,20 @@ sdl_gpu_renderer_drop :: (window: *Window, data: *Gpu_Renderer_Data)
 }
 
 // @TODO: Change string to some other path or stuff from asset file
-sdl_gpu_upload_texture :: (data: *Gpu_Renderer_Data, path: string) -> Texture_Handle
+sdl_gpu_upload_texture :: (data: *Gpu_Renderer_Data, texture_data: Cpu_Texture) -> Texture_Handle
 {
     // Albedo (base) texture
-    surface := load_image(path);
-    if !surface {
+    // surface := load_image(path);
+    texture_image := SDL_CreateSurfaceFrom(
+        xx texture_data.width, xx texture_data.height,
+        .RGBA32,
+        texture_data.pixels,
+        cast(s32) texture_data.pitch,
+    );
+    if !texture_image {
         log_error("Couldn't load texture image: %", SDL_GetErrorString());
         return .{};
     }
-    defer SDL_DestroySurface(surface);
-
-    // Convert surface to proper type for display
-    texture_image := SDL_ConvertSurface(surface, .RGBA32);
     defer SDL_DestroySurface(texture_image);
 
     tex_w := cast(u32) texture_image.w;
@@ -151,7 +153,7 @@ sdl_gpu_upload_texture :: (data: *Gpu_Renderer_Data, path: string) -> Texture_Ha
     return gpu_texture.handle;
 }
 
-sdl_gpu_upload_mesh :: (data: *Gpu_Renderer_Data, mesh_data: Mesh) -> Mesh_Handle
+sdl_gpu_upload_mesh :: (data: *Gpu_Renderer_Data, mesh_data: Cpu_Mesh) -> Mesh_Handle
 {
     vertices := mesh_data.vertices;
     indices := mesh_data.indices;
@@ -238,9 +240,9 @@ sdl_gpu_upload_mesh :: (data: *Gpu_Renderer_Data, mesh_data: Mesh) -> Mesh_Handl
     assert(ok, "Couldn't submit GPU command buffer: %", SDL_GetErrorString());
 
     gpu_mesh: Gpu_Mesh;
-    gpu_mesh.m = mesh_data;
     gpu_mesh.vertex_buffer = vertex_buffer;
     gpu_mesh.index_buffer  = index_buffer;
+    gpu_mesh.index_count   = xx indices.count;
     gpu_mesh.handle.index = xx data.meshes.count;
     gpu_mesh.handle.generation = 1;
     // Populate the textures to use here ...
@@ -286,7 +288,7 @@ sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data,
                 SDL_BindGPUIndexBuffer(frame.pass, *index_binding, SDL_GPUIndexElementSize._32BIT);
                 SDL_BindGPUFragmentSamplers(frame.pass, 0, sampler_bindings.data, 1);
                 SDL_PushGPUVertexUniformData(frame.command_buffer, 1, *cmd.uniforms, size_of(cmd.Uniforms));
-                SDL_DrawGPUIndexedPrimitives(frame.pass, xx mesh.indices.count, 1, 0, 0, 0);
+                SDL_DrawGPUIndexedPrimitives(frame.pass, mesh.index_count, 1, 0, 0, 0);
             case .DRAW_INDEXED_INSTANCES;
                 cmd := command.draw_indexed_instances;
 
@@ -313,7 +315,7 @@ sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data,
                 // SDL_BindGPUFragmentSamplers(frame.pass, 0, *sampler_binding, 1);
                 SDL_BindGPUFragmentSamplers(frame.pass, 0, sampler_bindings.data, 1);
                 SDL_PushGPUVertexUniformData(frame.command_buffer, 1, *cmd.uniforms, size_of(cmd.Uniforms));
-                SDL_DrawGPUIndexedPrimitives(frame.pass, xx mesh.indices.count, xx cmd.instances, 0, 0, 0);
+                SDL_DrawGPUIndexedPrimitives(frame.pass, mesh.index_count, xx cmd.instances, 0, 0, 0);
             }
         }
     }
@@ -334,6 +336,8 @@ Gpu_Renderer_Data :: struct {
     instance_buffer: *SDL_GPUBuffer;
 
     // @TODO: Change in favor of Handle_Array type, remove fixed array
+    // @TODO: These should not be inside the data, but in Renderer itself... I think?
+    //        Or at least some kind of shared structure between renderers?
     meshes:   Fixed_Array(Gpu_Mesh, 64);
     textures: Fixed_Array(Gpu_Texture, 12);
 }
@@ -411,9 +415,7 @@ renderer_end_frame :: (frame: *Renderer_Frame)
     assert(ok, "Couldn't submit command buffer to GPU: %", SDL_GetErrorString());
 }
 
-// `$T` refers to a Handle object.
-// `$R` refers to the actual resource which *holds* a handle inside itself (in order to match generation)
-// @TODO: Remove `/interface Handle` once moved to a Handle-based array.
+// @FIXME: This will probably go away once moving to handle arrays.
 get_gpu_resource :: (data: *Gpu_Renderer_Data, $R: Type, handle: Handle) -> *R
 {
     // Check handle before returning ref
@@ -694,12 +696,11 @@ Renderer_Frame :: struct {
 }
 
 Gpu_Mesh :: struct {
-    using #as m: Mesh;
-
     handle: Mesh_Handle;  // @TODO: Move it to a Handle array? This is used to check generation.
 
     vertex_buffer: *SDL_GPUBuffer;
     index_buffer:  *SDL_GPUBuffer;
+    index_count:   u32;
 
     sampler:  *SDL_GPUSampler;
     textures: Fixed_Array(Texture_Handle, 6);

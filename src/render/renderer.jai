@@ -41,14 +41,14 @@ render_list_begin :: (list: *Render_List, uniforms: Render_Uniforms)
     reset(*list.instances);
 }
 
-renderer_upload_texture :: (using ren: *Renderer, path: string) -> Texture_Handle
+renderer_load_texture :: (using ren: *Renderer, texture: Cpu_Texture) -> Texture_Handle
 {
     if #complete backend == {
-    case .SDL_GPU; return sdl_gpu_upload_texture(*gpu_data, path);
+    case .SDL_GPU; return sdl_gpu_upload_texture(*gpu_data, texture);
     }
 }
 
-renderer_upload_mesh :: (using ren: *Renderer, mesh: Mesh) -> Mesh_Handle
+renderer_load_mesh :: (using ren: *Renderer, mesh: Cpu_Mesh) -> Mesh_Handle
 {
     if #complete backend == {
     case .SDL_GPU; return sdl_gpu_upload_mesh(*gpu_data, mesh);
@@ -183,6 +183,7 @@ push_command :: (list: *Render_List, kind: Render_Command_Kind) -> *Render_Comma
     return push(*list.commands, cmd);
 }
 
+// @TODO: Make this a module and only export backend functions to this file.
 #load "backend/renderer_sdl_gpu.jai";
 
 #import "Basic";
