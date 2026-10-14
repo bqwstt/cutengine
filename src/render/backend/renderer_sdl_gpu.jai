@@ -72,7 +72,6 @@ sdl_gpu_renderer_drop :: (window: *Window, data: *Gpu_Renderer_Data)
 sdl_gpu_upload_texture :: (data: *Gpu_Renderer_Data, texture_data: Cpu_Texture) -> Texture_Handle
 {
     // Albedo (base) texture
-    // surface := load_image(path);
     texture_image := SDL_CreateSurfaceFrom(
         xx texture_data.width, xx texture_data.height,
         .RGBA32,
@@ -540,13 +539,6 @@ load_shader :: (device: *SDL_GPUDevice, path: string, num_samplers: u32 = 0, num
     shader_info.num_uniform_buffers = num_uniforms;
 
     return SDL_CreateGPUShader(device, *shader_info);
-}
-
-load_image :: (path: string) -> *SDL_Surface
-{
-    // @FIXME: Relative path used here
-    full_path := path_join(to_string(SDL_GetBasePath()), "../assets/texture", path);
-    return SDL_LoadPNG(to_c_string(full_path));
 }
 
 create_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice) -> *SDL_GPUGraphicsPipeline
