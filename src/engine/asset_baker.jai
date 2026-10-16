@@ -1,6 +1,6 @@
 parse_asset_type :: (file: File) -> Asset_Type #compile_time
 {
-    type: Asset_Type;
+    type: Asset_Type = .NOT_SUPPORTED;
     is_img := stbi_info_from_file(file.handle, null, null, null);
     if is_img  type = .TEXTURE;
 
@@ -20,10 +20,13 @@ write_asset :: (source_filepath: string) #compile_time
     if !ok return;
     defer file_close(*f);
 
+    asset_type := parse_asset_type(f);
+    if asset_type == .NOT_SUPPORTED  return;
+
     header: Asset_Header;
     header.magic = MAGIC;
     header.version = 1;
-    header.type = parse_asset_type(f);
+    header.type = asset_type;
     header.entry_count = 0;
     header.entry_offset = cast(u32) size_of(Asset_Header);
 

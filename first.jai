@@ -14,11 +14,13 @@ build :: ()
     set_build_options_dc(.{do_output = false});
     set_working_directory(#filepath);
 
+    bake_assets := false;
     release := false;
     for build_options.compile_time_command_line {
         if it == {
             case "release"; release = true;
             case "debug";
+            case "bake_assets"; bake_assets = true;
             case; compiler_report(tprint("Unknown argument '%'. Use 'debug' or 'release'.", it));
         }
     }
@@ -41,11 +43,13 @@ build :: ()
 
     result := rebuild_shaders();
     if !result.ok {
-        compiler_report(tprint("Couldn't compile shaders. SDL_ShaderCross Error:\n%", result.error));
+        compiler_report(tprint("Couldn't compile shaders. SDL_shadercross Error:\n%", result.error));
         exit(1);
     }
 
-    convert_assets();
+    if bake_assets {
+        convert_assets();
+    }
 }
 
 rebuild_shaders :: () -> Shader_Compilation_Info

@@ -50,6 +50,8 @@ Asset_Shader_Backend :: enum u8 {
 }
 
 Asset_Type :: enum u8 {
+    NOT_SUPPORTED :: 0x00;
+
     TEXTURE  :: 0x01;
     MATERIAL :: 0x02;
     MODEL    :: 0x05;
