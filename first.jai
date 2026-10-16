@@ -1,4 +1,9 @@
-#run build();
+ROOT_DIR   :: #filepath;
+ASSETS_DIR :: #run path_join(ROOT_DIR, "assets");
+SHADER_DIR :: #run path_join(ASSETS_DIR, "shader");
+
+// Need `stallable` as the statements above have to finish executing first.
+#run,stallable build();
 
 build :: ()
 {
@@ -39,12 +44,12 @@ build :: ()
         compiler_report(tprint("Couldn't compile shaders. SDL_ShaderCross Error:\n%", result.error));
         exit(1);
     }
+
+    convert_assets();
 }
 
 rebuild_shaders :: () -> Shader_Compilation_Info
 {
-    SHADER_DIR :: "assets/shader";
-
     out_dir := tprint("%/out", SHADER_DIR);
     make_directory_if_it_does_not_exist(out_dir);
 
@@ -76,7 +81,7 @@ rebuild_shaders :: () -> Shader_Compilation_Info
     }
 
     visit_files(
-        dir_name=tprint("%/src", SHADER_DIR),
+        dir_name=path_join(SHADER_DIR, "src"),
         recursive=true,
         user_data=*compilation_info,
         proc=shader_proc,
@@ -87,11 +92,28 @@ rebuild_shaders :: () -> Shader_Compilation_Info
     return compilation_info;
 }
 
+convert_assets :: ()
+{
+    convert_proc :: (info: *File_Visit_Info, data: *void) {
+        if ends_with(info.full_name, ".ca")  return;
+        write_asset(info.full_name);
+    }
+
+    visit_files(
+        dir_name=ASSETS_DIR,
+        recursive=true,
+        user_data=null,
+        proc=convert_proc,
+    );
+}
+
 Shader_Compilation_Info :: struct {
     out_dir: string;
     ok:      bool;
     error:   string;
 };
+
+#load "src/engine/asset_baker.jai";
 
 #import "Basic";
 #import "Compiler";

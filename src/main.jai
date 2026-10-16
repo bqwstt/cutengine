@@ -115,10 +115,14 @@ GiB :: 1024 * MiB;
 PERMANENT_MEMORY_SIZE :: 64 * MiB;
 TRANSIENT_MEMORY_SIZE ::  4 * GiB;
 
+ROOT_DIR   :: #run path_join(#filepath, "..");
+ASSETS_DIR :: #run path_join(ROOT_DIR, "assets");
+SHADER_DIR :: #run path_join(ASSETS_DIR, "shader");
+
 #load "utils/fixed_array.jai";
 #load "platform/platform.jai";
 #load "platform/platform_sdl.jai"; // @FIXME: Load depending on platform wanted
-#load "engine/asset.jai";
+#load "engine/asset_loader.jai";
 #load "engine/scene.jai";
 #load "engine/model.jai";
 #load "render/renderer.jai";

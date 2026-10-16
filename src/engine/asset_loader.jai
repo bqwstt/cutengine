@@ -168,3 +168,5 @@ Face :: struct {
     textures: [3]s32; // s32 as it can be -1
     normals:  [3]s32; // s32 as it can be -1
 }
+
+#load "asset_format.jai";
