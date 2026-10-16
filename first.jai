@@ -47,9 +47,9 @@ build :: ()
         exit(1);
     }
 
-    if bake_assets {
-        convert_assets();
-    }
+    // @FIXME: The prints coming from any procedure here are getting put in between other compiler messages.
+    // Hard to follow and ugly.
+    if bake_assets  convert_assets();
 }
 
 rebuild_shaders :: () -> Shader_Compilation_Info
