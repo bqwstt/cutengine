@@ -31,7 +31,7 @@ write_asset :: (source_filepath: string) #compile_time
     // NOTE: The casts are not needed, they are here mainly for readability.
     header: Asset_Header;
     header.magic   = cast(u32) MAGIC;
-    header.version = cast(u32) 1;
+    header.version = cast(u32) VERSION;
     header.type    = cast(Asset_Type) asset_type;
     header.entry_count  = cast(u32) 0; // @FIXME: We should get a count of how many elements and put it here
     header.entry_offset = cast(u32) size_of(Asset_Header);
@@ -72,6 +72,8 @@ write_texture :: (f: *File, file_data: string) #compile_time
     header.height = cast(u32) height;
     header.format = cast(Asset_Texture_Format)  channels;
     header.compressed = cast(u8) 0x00; // @TODO: Add compression?
+    header.stored_size = cast(u32) byte_count;
+    header.raw_size = cast(u32) byte_count; // @TODO: Change when compressed
 
     // Compute hash for texture.
     // We have to hash the header itself as two textures may have the same pixels
@@ -85,6 +87,8 @@ write_texture :: (f: *File, file_data: string) #compile_time
     file_write(f, *header.height, size_of(u32));
     file_write(f, *header.format, size_of(u8));
     file_write(f, *header.compressed, size_of(u8));
+    file_write(f, *header.stored_size, size_of(u32));
+    file_write(f, *header.raw_size, size_of(u32));
     file_write(f, *header.checksum, size_of(u64));
 
     // Write data

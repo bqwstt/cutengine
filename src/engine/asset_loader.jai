@@ -37,6 +37,57 @@ load_asset :: (asset: string, render_config: Render_Config) -> Cpu_Model, bool
     return model, true;
 }
 
+// @FIXME: Change to Cpu_Texture
+load_texture_asset :: (asset: string, render_config: Render_Config) -> Cpu_Texture, bool
+{
+    assets_path := path_join(to_string(SDL_GetBasePath()), "../assets/") ;
+    full_path := path_join(assets_path, asset);
+    file, ok := read_entire_file(full_path);
+    if !ok {
+        log_error("Couldn't load model from '%'", asset);
+        return .{}, false;
+    }
+
+    reader: Asset_Reader;
+    reader.data = file;
+    reader.pos  = 0;
+
+    // Read header
+    magic := read(*reader, u32); // Magic number
+    if magic != MAGIC {
+        log_error("File % is not an asset.", asset);
+        return .{}, false;
+    }
+
+    // For now, version does nothing until we bump up the version number.
+    version := read(*reader, u32); // Version
+    type := cast(Asset_Type) read(*reader, u8);
+    entry_count := read(*reader, u32);
+    entry_offset := read(*reader, u32);
+
+    // Texture
+    texture_width := read(*reader, u32);
+    texture_height := read(*reader, u32);
+    texture_format := cast(Asset_Texture_Format) read(*reader, u8);
+    texture_is_compressed := read(*reader, u8);
+    texture_stored_bytes := read(*reader, u32);
+    texture_raw_bytes := read(*reader, u32);
+    texture_checksum := read(*reader, u64);
+    texture_bytes := read_bytes(*reader, cast(s64) texture_raw_bytes);
+
+    tex: Cpu_Texture;
+    tex.height = texture_height;
+    tex.width = texture_width;
+    tex.pitch = texture_width * cast(u8) texture_format;
+    tex.pixels = texture_bytes.data;
+    return tex, true;
+}
+
+Asset_Contents :: union type: Asset_Type {
+    .TEXTURE ,, texture_data: Cpu_Texture;
+    .MODEL   ,, model_data:   Cpu_Model;
+}
+
 #scope_file
 
 /// Load an .obj model from a filepath. Currently reads vertices (`v` components) and faces (`f` components).
@@ -161,6 +212,31 @@ quoted_value :: (line: string) -> string {
     last  := find_index_from_right(line, #char "\"");
     if first < 0 || last <= first return "";
     return slice(line, first + 1, last - first - 1);
+}
+
+read :: (reader: *Asset_Reader, $T: Type) -> T, bool
+{
+    value: T;
+    if reader.pos + size_of(T) > reader.data.count  return value, false;
+    memcpy(*value, reader.data.data + reader.pos, size_of(T));
+    reader.pos += size_of(T);
+    return value, true;
+}
+
+read_bytes :: (reader: *Asset_Reader, size: s64) -> []u8, bool
+{
+    data: []u8;
+    if reader.pos + size > reader.data.count  return .[], false;
+
+    data.data = reader.data.data + reader.pos;
+    data.count = size;
+    reader.pos += size;
+    return data, true;
+}
+
+Asset_Reader :: struct {
+    data: string;
+    pos:  s64;
 }
 
 Face :: struct {
