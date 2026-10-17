@@ -28,10 +28,21 @@ build :: ()
     if release {
         set_optimization(*build_options, .OPTIMIZED);
         build_options.output_path = "build_release";
+        bake_assets = true;
     } else {
         set_optimization(*build_options, .DEBUG);
         build_options.output_path = "build_debug";
     }
+
+    result := rebuild_shaders();
+    if !result.ok {
+        compiler_report(tprint("Couldn't compile shaders. SDL_shadercross Error:\n%", result.error));
+        exit(1);
+    }
+
+    if bake_assets  convert_assets();
+
+    print("\n");
 
     make_directory_if_it_does_not_exist(build_options.output_path);
 
@@ -40,16 +51,6 @@ build :: ()
     set_build_options(build_options, w);
     add_build_string(tprint("DEBUG :: %;", ifx release then "false" else "true"), w);
     add_build_file("src/main.jai", w);
-
-    result := rebuild_shaders();
-    if !result.ok {
-        compiler_report(tprint("Couldn't compile shaders. SDL_shadercross Error:\n%", result.error));
-        exit(1);
-    }
-
-    // @FIXME: The prints coming from any procedure here are getting put in between other compiler messages.
-    // Hard to follow and ugly.
-    if bake_assets  convert_assets();
 }
 
 rebuild_shaders :: () -> Shader_Compilation_Info
