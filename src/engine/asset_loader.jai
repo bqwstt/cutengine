@@ -40,8 +40,7 @@ load_asset :: (asset: string, render_config: Render_Config) -> Cpu_Model, bool
 // @FIXME: Change to Cpu_Texture
 load_texture_asset :: (asset: string, render_config: Render_Config) -> Cpu_Texture, bool
 {
-    assets_path := path_join(#filepath, "../../assets/") ;
-    full_path := path_join(assets_path, asset);
+    full_path := path_join(ASSETS_PATH, asset);
     file, ok := read_entire_file(full_path);
     if !ok {
         log_error("Couldn't load model from '%'", asset);
@@ -243,5 +242,7 @@ Face :: struct {
     textures: [3]s32; // s32 as it can be -1
     normals:  [3]s32; // s32 as it can be -1
 }
+
+ASSETS_PATH :: #run path_join(#filepath, "../../assets/") ;
 
 #load "asset_format.jai";
