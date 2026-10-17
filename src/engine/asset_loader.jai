@@ -40,7 +40,7 @@ load_asset :: (asset: string, render_config: Render_Config) -> Cpu_Model, bool
 // @FIXME: Change to Cpu_Texture
 load_texture_asset :: (asset: string, render_config: Render_Config) -> Cpu_Texture, bool
 {
-    assets_path := path_join(to_string(SDL_GetBasePath()), "../assets/") ;
+    assets_path := path_join(#filepath, "../../assets/") ;
     full_path := path_join(assets_path, asset);
     file, ok := read_entire_file(full_path);
     if !ok {
@@ -60,26 +60,26 @@ load_texture_asset :: (asset: string, render_config: Render_Config) -> Cpu_Textu
     }
 
     // For now, version does nothing until we bump up the version number.
-    version := read(*reader, u32); // Version
+    version := read(*reader, u32);
     type := cast(Asset_Type) read(*reader, u8);
     entry_count := read(*reader, u32);
     entry_offset := read(*reader, u32);
 
     // Texture
+    texture_checksum := read(*reader, u64);
     texture_width := read(*reader, u32);
     texture_height := read(*reader, u32);
     texture_format := cast(Asset_Texture_Format) read(*reader, u8);
     texture_is_compressed := read(*reader, u8);
     texture_stored_bytes := read(*reader, u32);
     texture_raw_bytes := read(*reader, u32);
-    texture_checksum := read(*reader, u64);
     texture_bytes := read_bytes(*reader, cast(s64) texture_raw_bytes);
 
     tex: Cpu_Texture;
     tex.height = texture_height;
     tex.width = texture_width;
     tex.pitch = texture_width * cast(u8) texture_format;
-    tex.pixels = texture_bytes.data;
+    tex.pixels = texture_bytes;
     return tex, true;
 }
 
@@ -223,13 +223,12 @@ read :: (reader: *Asset_Reader, $T: Type) -> T, bool
     return value, true;
 }
 
-read_bytes :: (reader: *Asset_Reader, size: s64) -> []u8, bool
+read_bytes :: (reader: *Asset_Reader, size: s64) -> *u8, bool
 {
-    data: []u8;
-    if reader.pos + size > reader.data.count  return .[], false;
+    data: *u8;
+    if reader.pos + size > reader.data.count  return null, false;
 
-    data.data = reader.data.data + reader.pos;
-    data.count = size;
+    data = reader.data.data + reader.pos;
     reader.pos += size;
     return data, true;
 }

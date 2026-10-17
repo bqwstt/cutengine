@@ -11,24 +11,25 @@ Asset_Header :: struct {
 } #no_padding
 
 Asset_Texture_Header :: struct {
+    checksum:    u64;                   // 8 bytes - ID of this texture
     width:       u32;                   // 4 bytes - Texture width in pixels
     height:      u32;                   // 4 bytes - Texture height in pixels
     format:      Asset_Texture_Format;  // 1 byte  - Texture format
     compressed:  u8;                    // 1 byte  - Whether the texture is compressed or not
     stored_size: u32;                   // 4 bytes - How many bytes does the compressed texture take
     raw_size:    u32;                   // 4 bytes - How many bytes does the uncompressed texture take
-    checksum:    u64;                   // 8 bytes - ID of this texture
 } #no_padding
 
 Asset_Shader_Header :: struct {
-    stage:   Asset_Shader_Stage;    // 1 byte - Shader stage (vertex, fragment, compute)
-    backend: Asset_Shader_Backend;  // 1 byte - Shader backend (Vulkan's, D3D's formats etc.)
+    checksum: u64;                   // 8 bytes - ID of this shader
+    stage:    Asset_Shader_Stage;    // 1 byte  - Shader stage (vertex, fragment, compute)
+    backend:  Asset_Shader_Backend;  // 1 byte  - Shader backend (Vulkan's, D3D's formats etc.)
 } #no_padding
 
 Asset_Material_Header :: struct {
-    texture_count:   u8;   // 1 byte  - How many textures this material ues
-    shader_checksum: u64;  // 8 bytes - Reference to an existing shader
     checksum:        u64;  // 8 bytes - ID of this material
+    texture_count:   u8;   // 1 byte  - How many textures this material uses
+    shader_checksum: u64;  // 8 bytes - Reference to an existing shader
 } #no_padding
 
 Asset_Model_Header :: struct {

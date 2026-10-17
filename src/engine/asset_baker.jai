@@ -83,13 +83,13 @@ write_texture :: (f: *File, file_data: string) #compile_time
     header.checksum = hash;
 
     // Write header
+    file_write(f, *header.checksum, size_of(u64));
     file_write(f, *header.width,  size_of(u32));
     file_write(f, *header.height, size_of(u32));
     file_write(f, *header.format, size_of(u8));
     file_write(f, *header.compressed, size_of(u8));
     file_write(f, *header.stored_size, size_of(u32));
     file_write(f, *header.raw_size, size_of(u32));
-    file_write(f, *header.checksum, size_of(u64));
 
     // Write data
     file_write(f, pixels, byte_count);
