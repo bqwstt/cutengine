@@ -3,7 +3,7 @@ game_init :: (state: *Game_State, renderer: *Renderer)
     state.camera = camera_make(renderer.window);
     state.light.position = Vector3.{ 10, 10, 10 };
 
-    tent_asset, ok := load_asset("tent.ca", renderer.config);
+    tent_asset, ok := load_model_asset("tent.ca");
     assert(ok, "Failed to load asset");
 
     tent_model := load_model(renderer, tent_asset);
@@ -91,27 +91,24 @@ Game_State :: struct {
 render_draw_object :: (list: *Render_List, using obj: *Object)
 {
     transform := make_translation_matrix4(position) * rotation_matrix(Matrix4, rotation) * make_scale_matrix4(scale);
-    for model.meshes {
-        render_draw_mesh(list, it, transform);
-    }
+    for model.meshes  render_draw_mesh(list, it, model.material, transform);
 }
 
 load_model :: (renderer: *Renderer, model: Cpu_Model) -> Model
 {
     meshes: [..]Mesh_Handle;
-    array_reserve(*meshes, model.meshes.count);
+    array_reserve(*meshes, model.meshes.count,, context.transient_allocator);
+    for mesh: model.meshes  array_add(*meshes, renderer_load_mesh(renderer, mesh));
 
-    renderer_load_texture(renderer, model.material.albedo);
-    for mesh: model.meshes {
-        mesh_handle := renderer_load_mesh(renderer, mesh);
-        array_add(*meshes, mesh_handle,, context.transient_allocator);
-    }
-
-    return Model.{ meshes = meshes };
+    return Model.{
+        meshes   = meshes,
+        material = renderer_load_textures_using_material(renderer, model.material),
+    };
 }
 
 Model :: struct {
     meshes: []Mesh_Handle;
+    material: Material;
 }
 
 // @TEST: One-off entity for drawing. In general, shouldn't be used for drawing things.
