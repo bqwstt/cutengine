@@ -62,7 +62,10 @@ write_texture :: (f: *File, file_data: string) #compile_time
     channels: s32;
 
     // Load uncompressed bytes from texture
-    pixels := stbi_load_from_memory(file_data.data, cast(s32) file_data.count, *width, *height, *channels, 0);
+    // @TODO: We always construct a RGBA8 image (desired_channels = 4), which can
+    // take a couple more bytes for other kinds of images. Then format in the header is always RGBA8.
+    // We will also add BC7 format support later, so watch out for it.
+    pixels := stbi_load_from_memory(file_data.data, cast(s32) file_data.count, *width, *height, *channels, 4);
     if !pixels {
         print("Texture decode failed: %\n", to_string(stbi_failure_reason()));
         return;
@@ -74,7 +77,7 @@ write_texture :: (f: *File, file_data: string) #compile_time
     header: Asset_Texture_Header;
     header.width  = cast(u32) width;
     header.height = cast(u32) height;
-    header.format = cast(Asset_Texture_Format)  channels;
+    header.format = cast(Asset_Texture_Format) channels;
     header.compressed = cast(u8) 0x00; // @TODO: Add compression?
     header.stored_size = cast(u32) byte_count;
     header.raw_size = cast(u32) byte_count; // @TODO: Change when compressed

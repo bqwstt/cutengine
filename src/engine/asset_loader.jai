@@ -51,7 +51,7 @@ load_model_asset :: (asset: string) -> Cpu_Model, bool
 load_asset_begin :: (asset: string) -> Asset_Reader, bool
 {
     full_path := path_join(ASSETS_PATH, asset);
-    file, ok := read_entire_file(full_path);
+    file, ok := read_entire_file(full_path,, context.transient_allocator);
     if !ok {
         log_error("Couldn't read asset from '%'", asset);
         return .{}, false;

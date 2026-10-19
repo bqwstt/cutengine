@@ -17,6 +17,7 @@ Cpu_Mesh :: struct {
     material: Material;
 }
 
+// @TODO: Add format field here and populate it from the asset file.
 Cpu_Texture :: struct {
     width:  u32;
     height: u32;

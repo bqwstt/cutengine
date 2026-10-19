@@ -49,11 +49,7 @@ Asset_Type :: enum u8 #specified {
 Asset_Texture_Format :: enum u8 #specified {
     NOT_SUPPORTED :: 0x00;
 
-    GRAY8 :: 0x01;
-    GA8   :: 0x02;
-    RGB8  :: 0x03;
-    RGBA8 :: 0x04;
-
+    RGBA8 :: 0x01;
     BC7   :: 0x0A;
 }
 
