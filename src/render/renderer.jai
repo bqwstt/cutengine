@@ -47,6 +47,19 @@ renderer_load_texture :: (using ren: *Renderer, texture: Cpu_Texture) -> Texture
     }
 }
 
+renderer_load_textures_using_material :: (using ren: *Renderer, material_data: Cpu_Material) -> Material
+{
+    material: Material;
+    material.base_color = material_data.base_color;
+
+    if #complete backend == {
+    case .SDL_GPU;
+        material.albedo = sdl_gpu_upload_texture(*gpu_data, material_data.albedo);
+    }
+
+    return material;
+}
+
 renderer_load_mesh :: (using ren: *Renderer, mesh: Cpu_Mesh) -> Mesh_Handle
 {
     if #complete backend == {
@@ -54,17 +67,17 @@ renderer_load_mesh :: (using ren: *Renderer, mesh: Cpu_Mesh) -> Mesh_Handle
     }
 }
 
-render_draw_mesh :: (list: *Render_List, mesh: Mesh_Handle, transform: Matrix4)
+render_draw_mesh :: (list: *Render_List, mesh: Mesh_Handle, material: Material, transform: Matrix4)
 {
     cmd := push_command(list, .DRAW_INDEXED);
     if !cmd  return;
 
     uniforms: Draw_Indexed_Render_Command.Uniforms;
     uniforms.transform = transform;
-    cmd.draw_indexed = Draw_Indexed_Render_Command.{ mesh = mesh, uniforms = uniforms }; 
+    cmd.draw_indexed = Draw_Indexed_Render_Command.{ mesh = mesh, material = material, uniforms = uniforms }; 
 }
 
-render_draw_mesh_instances :: (list: *Render_List, mesh: Mesh_Handle, transform: Matrix4, instances: []Render_Instance)
+render_draw_mesh_instances :: (list: *Render_List, mesh: Mesh_Handle, material: Material, transform: Matrix4, instances: []Render_Instance)
 {
     // Copy render instances to list
     instance := push(*list.instances, instances);
@@ -77,6 +90,7 @@ render_draw_mesh_instances :: (list: *Render_List, mesh: Mesh_Handle, transform:
     uniforms.transform = transform;
     cmd.draw_indexed_instances = Draw_Indexed_Instanced_Render_Command.{
         mesh = mesh,
+        material = material,
         uniforms = uniforms,
         instances = instances.count
     };
@@ -96,6 +110,14 @@ Renderer :: struct {
     Backend_Data :: union backend: Backend_Kind {
         .SDL_GPU ,, gpu_data: Gpu_Renderer_Data;
     }
+}
+
+// #region API-agnostic GPU data
+
+// Follows Cpu_Texture's layout.
+Material :: struct {
+    albedo:     Texture_Handle;
+    base_color: Vector4;
 }
 
 // #region Render commands
@@ -149,6 +171,7 @@ Render_Light_Uniforms :: struct {
 
 Draw_Indexed_Render_Command :: struct {
     mesh: Mesh_Handle;
+    material: Material;
     uniforms: Uniforms;
 
     #assert size_of(Uniforms) % 16 == 0;

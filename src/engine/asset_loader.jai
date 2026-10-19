@@ -30,7 +30,7 @@ load_model_asset :: (asset: string) -> Cpu_Model, bool
     material_checksum := read(*reader, u64);
 
     // @FIXME: Temporary, hardcoded.
-    material: Material;
+    material: Cpu_Material;
     material.albedo = load_texture_asset("colormap.ca");
 
     meshes: [..]Cpu_Mesh;

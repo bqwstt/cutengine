@@ -269,14 +269,13 @@ sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data,
                 cmd := command.draw_indexed;
 
                 // Grab GPU mesh and bind buffers and samplers
-                mesh := get_gpu_resource(data, Gpu_Mesh, cmd.mesh);
+                mesh: *Gpu_Mesh = get_gpu_resource(data, Gpu_Mesh, cmd.mesh);
                 if !mesh  continue;
 
                 vertex_binding  := SDL_GPUBufferBinding.{ buffer = mesh.vertex_buffer, offset = 0 };
                 index_binding   := SDL_GPUBufferBinding.{ buffer = mesh.index_buffer, offset = 0 };
-                // sampler_binding := SDL_GPUTextureSamplerBinding.{ texture = mesh.texture, sampler = mesh.sampler };
 
-                albedo := get_gpu_resource(data, Gpu_Texture, Texture_Handle.{ 0, 1 });
+                albedo: *Gpu_Texture = get_gpu_resource(data, Gpu_Texture, cmd.material.albedo);
                 sampler_bindings := SDL_GPUTextureSamplerBinding.[
                     .{
                         texture = albedo.texture,
@@ -294,14 +293,13 @@ sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data,
                 cmd := command.draw_indexed_instances;
 
                 // Grab GPU mesh and bind buffers and samplers
-                mesh := get_gpu_resource(data, Gpu_Mesh, cmd.mesh);
+                mesh: *Gpu_Mesh = get_gpu_resource(data, Gpu_Mesh, cmd.mesh);
                 if !mesh  continue;
 
                 vertex_binding  := SDL_GPUBufferBinding.{ buffer = mesh.vertex_buffer, offset = 0 };
                 index_binding   := SDL_GPUBufferBinding.{ buffer = mesh.index_buffer, offset = 0 };
-                // sampler_binding := SDL_GPUTextureSamplerBinding.{ texture = mesh.texture, sampler = mesh.sampler };
 
-                albedo := get_gpu_resource(data, Gpu_Texture, Texture_Handle.{ 0, 1 });
+                albedo: *Gpu_Texture = get_gpu_resource(data, Gpu_Texture, cmd.material.albedo);
                 sampler_bindings := SDL_GPUTextureSamplerBinding.[
                     .{
                         texture = albedo.texture,
@@ -313,7 +311,6 @@ sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data,
                 SDL_BindGPUVertexBuffers(frame.pass, 0, *vertex_binding, 1);
                 SDL_BindGPUVertexStorageBuffers(frame.pass, 0, *data.instance_buffer, 1);
                 SDL_BindGPUIndexBuffer(frame.pass, *index_binding, SDL_GPUIndexElementSize._32BIT);
-                // SDL_BindGPUFragmentSamplers(frame.pass, 0, *sampler_binding, 1);
                 SDL_BindGPUFragmentSamplers(frame.pass, 0, sampler_bindings.data, 1);
                 SDL_PushGPUVertexUniformData(frame.command_buffer, 1, *cmd.uniforms, size_of(cmd.Uniforms));
                 SDL_DrawGPUIndexedPrimitives(frame.pass, mesh.index_count, xx cmd.instances, 0, 0, 0);

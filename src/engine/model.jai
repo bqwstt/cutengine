@@ -14,7 +14,6 @@ Texture_Handle :: #type Handle(Cpu_Texture);
 Cpu_Mesh :: struct {
     vertices: []Vertex;
     indices:  []u32;
-    material: Material;
 }
 
 // @TODO: Add format field here and populate it from the asset file.
@@ -27,12 +26,12 @@ Cpu_Texture :: struct {
 
 Cpu_Model :: struct {
     meshes:   []Cpu_Mesh;
-    material: Material;
+    material: Cpu_Material;
 }
 
-// @FIXME: Should these be called "Cpu_<...>"? :)
-Material :: struct {
-    albedo: Cpu_Texture;
+Cpu_Material :: struct {
+    albedo:     Cpu_Texture;
+    base_color: Vector4 = .{ 1.0, 1.0, 1.0, 1.0 };
 }
 
 Vertex :: struct {
