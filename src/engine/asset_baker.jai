@@ -1,8 +1,9 @@
-parse_asset_type :: (data: string) -> Asset_Type #compile_time
+parse_asset_type :: (filename: string, data: string) -> Asset_Type #compile_time
 {
     type: Asset_Type = .NOT_SUPPORTED;
     is_img := stbi_info_from_memory(data.data, cast(s32) data.count, null, null, null);
     if is_img  type = .TEXTURE;
+    if path_extension(filename) == "obj"  type = .MODEL; // There is no magic number in obj.
 
     return type;
 }
@@ -23,7 +24,7 @@ write_asset :: (source_filepath: string) #compile_time
     if !ok  return;
     defer file_close(*f);
 
-    asset_type := parse_asset_type(source_contents);
+    asset_type := parse_asset_type(source_filepath, source_contents);
     if asset_type == .NOT_SUPPORTED  return;
 
     print("Writing asset: %\n", target);
@@ -48,8 +49,11 @@ write_asset :: (source_filepath: string) #compile_time
     // Write asset data
     if asset_type == {
     case .TEXTURE; write_texture(*f, source_contents);
+    case .MODEL;   write_model(*f, source_contents);
     }
 }
+
+#scope_file
 
 write_texture :: (f: *File, file_data: string) #compile_time
 {
@@ -95,6 +99,139 @@ write_texture :: (f: *File, file_data: string) #compile_time
     file_write(f, pixels, byte_count);
 }
 
+write_model :: (f: *File, file_data: string) #compile_time
+{
+    // Read source data
+    // @TODO: Check format instead of assuming it's obj
+    vertices, indices := read_obj(file_data);
+
+    header: Asset_Model_Header;
+    header.vertices_count = cast(u32) vertices.count;
+    header.indices_count = cast(u32) indices.count;
+    header.material_checksum = cast(u64) 0; // @TODO: Fill
+
+    // Write header
+    file_write(f, *header.vertices_count, size_of(u32));
+    file_write(f, *header.indices_count, size_of(u32));
+    file_write(f, *header.material_checksum, size_of(u64));
+
+    // Write data
+    // @TODO: Probably size_of(Vertex) is not what we want. What about vertices without normals?
+    //        I think that's fine though, they will be 0, but double check.
+    // @TODO: Store x, y, z in separate columns?
+    file_write(f, vertices.data, vertices.count * size_of(Vertex)); // Vertices
+    file_write(f, indices.data, indices.count * size_of(u32));      // Indices
+}
+
+/// Load an .obj model from a filepath. Currently reads vertices (`v` components) and faces (`f` components).
+/// There is no support for materials.
+/// @FIXME: This is too slow.
+read_obj :: (file_contents: string) -> []Vertex, []u32 #compile_time
+{
+    context.allocator = temp;
+
+    positions: [..]Vector3;
+    normals:   [..]Vector3;
+    texture_coords: [..]Vector2;
+
+    faces:    [..]Face;
+
+    // @TODO: Profile
+    // @TODO: Parse different meshes
+    for line: split(file_contents, "\n") {
+        s := line;
+
+        if starts_with(s, "v ") {
+            // Vertex coordinates (v v1 v2 v3)
+            advance(*s, 2);
+            x := parse_float(*s);
+            y := parse_float(*s);
+            z := parse_float(*s);
+            array_add(*positions, .{ x, y, z });
+        } else if starts_with(s, "vt ") {
+            // Texture coordinates (vt vt1 vt2)
+            advance(*s, 3);
+            u := parse_float(*s);
+            v := parse_float(*s);
+            array_add(*texture_coords, .{ u, 1-v }); // OBJ uv's are bottom-left origin, we are top-left, so flip
+        } else if starts_with(s, "vn ") {
+            // Normal coordinates (vn vn1 vn2 vn3)
+            advance(*s, 3);
+            x := parse_float(*s);
+            y := parse_float(*s);
+            z := parse_float(*s);
+            array_add(*normals, .{ x, y, z });
+        } else if starts_with(s, "f ") {
+            // Face (f v1/[vt1]/[vn2] v2/[vt2]/[vn2] v3/[vt3]/[vn3])
+            advance(*s, 2);
+
+            face: Face;
+            for i: 0..2 {
+                v := parse_int(*s, u32, delimiters="/");
+                while s.count && s[0] == #char "/"  advance(*s, 1);
+
+                // vt and vn are optional, mark them with -1 if not found
+                vt := ifx s.count && s[0] != #char " "  parse_int(*s, s32, delimiters="/") else  -1;
+                while s.count && s[0] == #char "/"  advance(*s, 1);
+
+                vn := ifx s.count && s[0] != #char " "  parse_int(*s, s32, delimiters="/") else  -1;
+                while s.count && s[0] == #char "/"  advance(*s, 1);
+
+                face.indices[i]  = v;
+                face.normals[i]  = vn;
+                face.textures[i] = vt;
+            }
+
+            array_add(*faces, face);
+        }
+    }
+
+    vertices: [..]Vertex;
+    indices:  [..]u32;
+
+    for face: faces {
+        // f 2/1/1 3/2/1 4/3/1
+        for i: 0..2 {
+            normals_index := face.normals[i] - 1;
+            texture_coord_index := face.textures[i] - 1;
+
+            v: Vertex;
+            v.position = positions[face.indices[i]-1];
+            v.normal = ifx normals_index >= 0 normals[normals_index] else .{};
+            v.texture_coords = ifx texture_coord_index >= 0 texture_coords[texture_coord_index] else .{};
+
+            // Reuse an identical vertex if we already added one
+            // @FIXME: This probably is slow.
+            found := -1;
+            for existing, idx: vertices {
+                if existing.position == v.position
+                    && existing.normal == v.normal
+                    && existing.texture_coords == v.texture_coords
+                {
+                    found = idx;
+                    break;
+                }
+            }
+
+            if found >= 0 {
+                array_add(*indices, cast(u32) found);
+            } else {
+                array_add(*indices, cast(u32) vertices.count);  // index of the vertex we're about to add
+                array_add(*vertices, v);
+            }
+        }
+    }
+
+    return vertices, indices;
+}
+
+Face :: struct {
+    indices:  [3]u32;
+    textures: [3]s32; // s32 as it can be -1
+    normals:  [3]s32; // s32 as it can be -1
+}
+
 #load "asset_format.jai";
+#load "model.jai"; // For Vertex
 
 #import "Hash";
