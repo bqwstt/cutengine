@@ -11,7 +11,6 @@ Asset_Header :: struct {
 } #no_padding
 
 Asset_Texture_Header :: struct {
-    checksum:    u64;                   // 8 bytes - ID of this texture
     width:       u32;                   // 4 bytes - Texture width in pixels
     height:      u32;                   // 4 bytes - Texture height in pixels
     format:      Asset_Texture_Format;  // 1 byte  - Texture format
@@ -21,21 +20,23 @@ Asset_Texture_Header :: struct {
 } #no_padding
 
 Asset_Shader_Header :: struct {
-    checksum: u64;                   // 8 bytes - ID of this shader
-    stage:    Asset_Shader_Stage;    // 1 byte  - Shader stage (vertex, fragment, compute)
-    backend:  Asset_Shader_Backend;  // 1 byte  - Shader backend (Vulkan's, D3D's formats etc.)
+    stage:               Asset_Shader_Stage;    // 1 byte  - Shader stage (vertex, fragment, compute)
+    backend:             Asset_Shader_Backend;  // 1 byte  - Shader backend (Vulkan's, D3D's formats etc.)
+    num_samplers:        u8;                    // 1 byte  - Number of samplers to use
+    num_uniforms:        u8;                    // 1 byte  - Number of uniforms to use
+    num_storage_buffers: u8;                    // 1 byte  - Number of storage buffers to use
+    code_size:           u32;                   // 4 bytes - Size of the shader code in the blob
 } #no_padding
 
 Asset_Material_Header :: struct {
-    checksum:        u64;  // 8 bytes - ID of this material
-    texture_count:   u8;   // 1 byte  - How many textures this material uses
-    shader_checksum: u64;  // 8 bytes - Reference to an existing shader
+    albedo_name_len: u32;  // 4 bytes - Size of the asset name to use as albedo texture
+    shader_name_len: u32;  // 4 bytes - Size of the shader name to use
 } #no_padding
 
 Asset_Model_Header :: struct {
     vertices_count:    u32;  // 4 bytes - How many vertices the model has
     indices_count:     u32;  // 4 bytes - How many indices the model uses
-    material_checksum: u64;  // 8 bytes - Reference to an existing material
+    material_name_len: u32;  // 4 bytes - Length of the asset name to use as material
 } #no_padding
 
 Asset_Type :: enum u8 #specified {

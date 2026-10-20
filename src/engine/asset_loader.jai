@@ -3,7 +3,6 @@ load_texture_asset :: (asset: string) -> Cpu_Texture, bool
     reader, ok := load_asset_begin(asset);
     if !ok  return .{}, false;
 
-    checksum := read(*reader, u64);
     width := read(*reader, u32);
     height := read(*reader, u32);
     format := cast(Asset_Texture_Format) read(*reader, u8);
@@ -27,18 +26,23 @@ load_model_asset :: (asset: string) -> Cpu_Model, bool
 
     vertices_count := read(*reader, u32);
     indices_count  := read(*reader, u32);
-    material_checksum := read(*reader, u64);
-
-    // @FIXME: Temporary, hardcoded.
-    material: Cpu_Material;
-    material.albedo = load_texture_asset("colormap.ca");
+    material_name_len := read(*reader, u32);
 
     meshes: [..]Cpu_Mesh;
+    meshes.allocator = context.transient_allocator;
+
     mesh: Cpu_Mesh;
     mesh.vertices = .{ data = cast(*Vertex) read_bytes(*reader, vertices_count * size_of(Vertex)), count = vertices_count };
     mesh.indices  = .{ data = cast(*u32) read_bytes(*reader, indices_count * size_of(u32)), count = indices_count };
-    array_add(*meshes, mesh,, context.transient_allocator);
-    // @FIXME: End temporary.
+    array_add(*meshes, mesh);
+
+    material: Cpu_Material;
+    material_name := to_string(read_bytes(*reader, material_name_len * size_of(u8)), material_name_len);
+    if material_name != "" {
+        // @TODO: This loads each file separately. Add a check for #if DEBUG once we have a packed asset path.
+        // @TODO: Change this for a `load_material_asset` call, which parses all texture types.
+        material.albedo = load_texture_asset(material_name);
+    }
 
     model: Cpu_Model;
     model.meshes = meshes;
@@ -50,7 +54,9 @@ load_model_asset :: (asset: string) -> Cpu_Model, bool
 
 load_asset_begin :: (asset: string) -> Asset_Reader, bool
 {
-    full_path := path_join(ASSETS_PATH, asset);
+    // Add the extension ourselves.
+    name := tprint("%.%", path_strip_extension(asset), ASSETS_EXT);
+    full_path := path_join(ASSETS_PATH, name);
     file, ok := read_entire_file(full_path,, context.transient_allocator);
     if !ok {
         log_error("Couldn't read asset from '%'", asset);
@@ -101,6 +107,7 @@ Asset_Reader :: struct {
     pos:  s64;
 }
 
+ASSETS_EXT  :: "ca";
 ASSETS_PATH :: #run path_join(#filepath, "../../assets/") ;
 
 #load "asset_format.jai";

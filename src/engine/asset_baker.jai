@@ -82,15 +82,7 @@ write_texture :: (f: *File, file_data: string) #compile_time
     header.stored_size = cast(u32) byte_count;
     header.raw_size = cast(u32) byte_count; // @TODO: Change when compressed
 
-    // Compute hash for texture.
-    // We have to hash the header itself as two textures may have the same pixels
-    // but different metadata, e.g. a 2x8 vs 4x4 image.
-    hash := fnv1a_hash(*header, size_of(Asset_Texture_Header)); // Header
-    hash  = fnv1a_hash(pixels, byte_count, hash);               // Data
-    header.checksum = hash;
-
     // Write header
-    file_write(f, *header.checksum, size_of(u64));
     file_write(f, *header.width,  size_of(u32));
     file_write(f, *header.height, size_of(u32));
     file_write(f, *header.format, size_of(u8));
@@ -106,17 +98,20 @@ write_model :: (f: *File, file_data: string) #compile_time
 {
     // Read source data
     // @TODO: Check format instead of assuming it's obj
-    vertices, indices := read_obj(file_data);
+    obj_data := read_obj(file_data);
+    vertices := obj_data.vertices;
+    indices  := obj_data.indices;
+    material := obj_data.material;
 
     header: Asset_Model_Header;
     header.vertices_count = cast(u32) vertices.count;
     header.indices_count = cast(u32) indices.count;
-    header.material_checksum = cast(u64) 0; // @TODO: Fill
+    header.material_name_len = cast(u32) material.count; // @TODO: Write material size and name
 
     // Write header
     file_write(f, *header.vertices_count, size_of(u32));
     file_write(f, *header.indices_count, size_of(u32));
-    file_write(f, *header.material_checksum, size_of(u64));
+    file_write(f, *header.material_name_len, size_of(u32));
 
     // Write data
     // @TODO: Probably size_of(Vertex) is not what we want. What about vertices without normals?
@@ -124,12 +119,13 @@ write_model :: (f: *File, file_data: string) #compile_time
     // @TODO: Store x, y, z in separate columns?
     file_write(f, vertices.data, vertices.count * size_of(Vertex)); // Vertices
     file_write(f, indices.data, indices.count * size_of(u32));      // Indices
+    file_write(f, material.data, material.count * size_of(u8));     // Material name (if any)
 }
 
 /// Load an .obj model from a filepath. Currently reads vertices (`v` components) and faces (`f` components).
 /// There is no support for materials.
 /// @FIXME: This is too slow.
-read_obj :: (file_contents: string) -> []Vertex, []u32 #compile_time
+read_obj :: (file_contents: string) -> Obj_Data #compile_time
 {
     context.allocator = temp;
 
@@ -138,6 +134,7 @@ read_obj :: (file_contents: string) -> []Vertex, []u32 #compile_time
     texture_coords: [..]Vector2;
 
     faces:    [..]Face;
+    material_name: string;
 
     // @TODO: Profile
     // @TODO: Parse different meshes
@@ -186,6 +183,10 @@ read_obj :: (file_contents: string) -> []Vertex, []u32 #compile_time
             }
 
             array_add(*faces, face);
+        } else if starts_with(s, "usemtl ") {
+            advance(*s, 7);
+            name := trim(s);
+            material_name = copy_string(name);
         }
     }
 
@@ -225,7 +226,17 @@ read_obj :: (file_contents: string) -> []Vertex, []u32 #compile_time
         }
     }
 
-    return vertices, indices;
+    data: Obj_Data;
+    data.vertices = vertices;
+    data.indices = indices;
+    data.material = material_name;
+    return data;
+}
+
+Obj_Data :: struct {
+    vertices: []Vertex;
+    indices:  []u32;
+    material: string;
 }
 
 Face :: struct {
