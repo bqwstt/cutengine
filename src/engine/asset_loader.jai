@@ -44,11 +44,18 @@ load_model_asset :: (asset: string) -> Cpu_Model, bool
     array_add(*meshes, mesh);
 
     material: Cpu_Material;
-    material_name := to_string(read_bytes(*reader, material_name_len * size_of(u8)), material_name_len);
+    material_name := to_string(read_bytes(*reader, material_name_len), material_name_len);
+    albedo_ok := false;
     if material_name != "" {
         // @TODO: This loads each file separately. Add a check for #if DEBUG once we have a packed asset path.
         // @TODO: Change this for a `load_material_asset` call, which parses all texture types.
-        material.albedo = load_texture_asset(material_name);
+        material.albedo, albedo_ok = load_texture_asset(material_name);
+    }
+
+    // No material, or its texture couldn't be loaded: use the missing texture so it stands out.
+    if !albedo_ok {
+        material.albedo, albedo_ok = load_texture_asset(MISSING_TEXTURE);
+        assert(albedo_ok, "Couldn't load fallback texture '%'", MISSING_TEXTURE);
     }
 
     model: Cpu_Model;
@@ -57,12 +64,31 @@ load_model_asset :: (asset: string) -> Cpu_Model, bool
     return model, true;
 }
 
+load_shader_asset :: (asset: string) -> Cpu_Shader, bool
+{
+    reader, ok := load_asset_begin(asset);
+    if !ok  return .{}, false;
+
+    shader: Cpu_Shader;
+    shader.stage   = cast(Asset_Shader_Stage)   read(*reader, u8);
+    shader.backend = cast(Asset_Shader_Backend) read(*reader, u8);
+    shader.num_samplers         = read(*reader, u8);
+    shader.num_storage_textures = read(*reader, u8);
+    shader.num_storage_buffers  = read(*reader, u8);
+    shader.num_uniforms         = read(*reader, u8);
+
+    code_len := read(*reader, u32);
+    shader.code = to_string(read_bytes(*reader, code_len), code_len);
+
+    return shader, true;
+}
+
 #scope_file
 
 load_asset_begin :: (asset: string) -> Asset_Reader, bool
 {
-    // Add the extension ourselves.
-    name := tprint("%.%", path_strip_extension(asset), ASSETS_EXT);
+    // Add the extension ourselves. Only strip `.ca`, as shader names have dots in them (texture.frag).
+    name := ifx path_extension(asset) == ASSETS_EXT  asset else tprint("%.%", asset, ASSETS_EXT);
     full_path := path_join(ASSETS_PATH, name);
     file, ok := read_entire_file(full_path,, context.transient_allocator);
     if !ok {
@@ -116,5 +142,7 @@ Asset_Reader :: struct {
 
 ASSETS_EXT  :: "ca";
 ASSETS_PATH :: #run path_join(#filepath, "../../assets/") ;
+
+MISSING_TEXTURE :: "missing_texture"; // Used when a model has no material or its texture can't be loaded
 
 #load "asset_format.jai";

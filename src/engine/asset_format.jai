@@ -20,12 +20,13 @@ Asset_Texture_Header :: struct {
 } #no_padding
 
 Asset_Shader_Header :: struct {
-    stage:               Asset_Shader_Stage;    // 1 byte  - Shader stage (vertex, fragment, compute)
-    backend:             Asset_Shader_Backend;  // 1 byte  - Shader backend (Vulkan's, D3D's formats etc.)
-    num_samplers:        u8;                    // 1 byte  - Number of samplers to use
-    num_uniforms:        u8;                    // 1 byte  - Number of uniforms to use
-    num_storage_buffers: u8;                    // 1 byte  - Number of storage buffers to use
-    code_size:           u32;                   // 4 bytes - Size of the shader code in the blob
+    stage:                Asset_Shader_Stage;    // 1 byte  - Shader stage (vertex, fragment, compute)
+    backend:              Asset_Shader_Backend;  // 1 byte  - Shader backend (Vulkan's, D3D's formats etc.)
+    num_samplers:         u8;                    // 1 byte  - Number of samplers to use
+    num_storage_textures: u8;                    // 1 byte  - Number of storage textures to use
+    num_storage_buffers:  u8;                    // 1 byte  - Number of storage buffers to use
+    num_uniforms:         u8;                    // 1 byte  - Number of uniform buffers to use
+    code_len:             u32;                   // 4 bytes - How many bytes of shader code follow the header
 } #no_padding
 
 Asset_Material_Header :: struct {
@@ -44,6 +45,7 @@ Asset_Type :: enum u8 #specified {
 
     TEXTURE  :: 0x01;
     MATERIAL :: 0x02;
+    SHADER   :: 0x03;
     MODEL    :: 0x05;
 }
 

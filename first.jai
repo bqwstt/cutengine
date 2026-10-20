@@ -34,12 +34,8 @@ build :: ()
         build_options.output_path = "build_debug";
     }
 
-    result := rebuild_shaders();
-    if !result.ok {
-        compiler_report(tprint("Couldn't compile shaders. SDL_shadercross Error:\n%", result.error));
-        exit(1);
-    }
-
+    // Shaders are always baked, so editing one only needs a rebuild.
+    bake_shaders();
     if bake_assets  convert_assets();
 
     print("\n");
@@ -53,54 +49,25 @@ build :: ()
     add_build_file("src/main.jai", w);
 }
 
-rebuild_shaders :: () -> Shader_Compilation_Info
+bake_shaders :: ()
 {
-    out_dir := tprint("%/out", SHADER_DIR);
-    make_directory_if_it_does_not_exist(out_dir);
-
-    compilation_info: Shader_Compilation_Info;
-    compilation_info.out_dir = out_dir;
-    compilation_info.ok = true;
-
-    shader_proc :: (info: *File_Visit_Info, data: *Shader_Compilation_Info) {
-        if !ends_with(info.short_name, ".hlsl")  return;
-        base := path_strip_extension(info.short_name);
-
-        out_path: string;
-        #if OS == {
-            case .WINDOWS; out_path = tprint("%/%.%", data.out_dir, base, "dxil");
-            case .LINUX;   out_path = tprint("%/%.%", data.out_dir, base, "spv");
-            case .MACOS;   out_path = tprint("%/%.%", data.out_dir, base, "msl");
-        }
-
-        result, stdout, stderr := run_command(
-            "shadercross", info.full_name,
-            "-o", out_path,
-            capture_and_return_output = true,
-            print_captured_output = false);
-
-        if result.exit_code == 1 {
-            data.ok = false;
-            data.error = stderr;
-        }
+    shader_proc :: (info: *File_Visit_Info, data: *void) {
+        if ends_with(info.short_name, ".hlsl")  write_asset(info.full_name);
     }
 
     visit_files(
         dir_name=path_join(SHADER_DIR, "src"),
         recursive=true,
-        user_data=*compilation_info,
+        user_data=null,
         proc=shader_proc,
-        visit_files=true,
-        visit_directories=true
     );
-
-    return compilation_info;
 }
 
 convert_assets :: ()
 {
     convert_proc :: (info: *File_Visit_Info, data: *void) {
         if ends_with(info.full_name, ".ca")  return;
+        if ends_with(info.full_name, ".hlsl")  return; // Baked on every build by bake_shaders()
         write_asset(info.full_name);
     }
 
@@ -111,12 +78,6 @@ convert_assets :: ()
         proc=convert_proc,
     );
 }
-
-Shader_Compilation_Info :: struct {
-    out_dir: string;
-    ok:      bool;
-    error:   string;
-};
 
 #load "src/engine/asset_baker.jai";
 

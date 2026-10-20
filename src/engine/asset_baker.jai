@@ -4,6 +4,7 @@ parse_asset_type :: (filename: string, data: string) -> Asset_Type #compile_time
     is_img := stbi_info_from_memory(data.data, cast(s32) data.count, null, null, null);
     if is_img  type = .TEXTURE;
     if path_extension(filename) == "obj"  type = .MODEL; // There is no magic number in obj.
+    if path_extension(filename) == "hlsl" type = .SHADER;
 
     return type;
 }
@@ -20,12 +21,14 @@ write_asset :: (source_filepath: string) #compile_time
     target_filename := tprint("%.ca", path_filename(path_strip_extension(source_filepath)));
     target := path_join(ASSETS_DIR, target_filename); // ASSETS_DIR is defined in first.jai
 
+    // Check the type before opening the target: opening truncates it, so unsupported files
+    // (cube.mtl next to cube.obj) would otherwise leave an empty .ca behind.
+    asset_type := parse_asset_type(source_filepath, source_contents);
+    if asset_type == .NOT_SUPPORTED  return;
+
     f, ok := file_open(target, for_writing = true);
     if !ok  return;
     defer file_close(*f);
-
-    asset_type := parse_asset_type(source_filepath, source_contents);
-    if asset_type == .NOT_SUPPORTED  return;
 
     print("Writing asset: %\n", target);
 
@@ -50,6 +53,7 @@ write_asset :: (source_filepath: string) #compile_time
     if asset_type == {
     case .TEXTURE; write_texture(*f, source_contents);
     case .MODEL;   write_model(*f, source_contents);
+    case .SHADER;  write_shader(*f, source_filepath);
     }
 }
 
@@ -92,6 +96,53 @@ write_texture :: (f: *File, file_data: string) #compile_time
 
     // Write data
     file_write(f, pixels, byte_count);
+}
+
+write_shader :: (f: *File, source_filepath: string) #compile_time
+{
+    name := path_filename(path_strip_extension(source_filepath)); // texture.frag.hlsl -> texture.frag
+
+    header: Asset_Shader_Header;
+    if path_extension(name) == {
+    case "vert"; header.stage = .VERTEX;
+    case "frag"; header.stage = .FRAGMENT;
+    case "comp"; header.stage = .COMPUTE;
+    case;
+        compiler_report(tprint("Couldn't deduce shader stage from filename: %", source_filepath));
+        return;
+    }
+
+    // We only bake the backend for the platform we're building on.
+    // @TODO: Should we always produce SPIRV and embed it?
+    #if OS == .WINDOWS     header.backend = .DXIL;
+    else #if OS == .LINUX  header.backend = .SPIRV;
+    else                   header.backend = .MSL;
+    dest := tprint("%", header.backend); // Enum names match shadercross' destination formats
+
+    // Reflection tells us how many resources the shader declares, so nobody has to type them by hand.
+    reflection, reflection_ok := run_shadercross(source_filepath, "JSON");
+    if !reflection_ok  return;
+
+    code, code_ok := run_shadercross(source_filepath, dest);
+    if !code_ok  return;
+
+    header.num_samplers         = reflected_count(reflection, "samplers");
+    header.num_storage_textures = reflected_count(reflection, "storage_textures");
+    header.num_storage_buffers  = reflected_count(reflection, "storage_buffers");
+    header.num_uniforms         = reflected_count(reflection, "uniform_buffers");
+    header.code_len             = cast(u32) code.count;
+
+    // Write header
+    file_write(f, *header.stage, size_of(u8));
+    file_write(f, *header.backend, size_of(u8));
+    file_write(f, *header.num_samplers, size_of(u8));
+    file_write(f, *header.num_storage_textures, size_of(u8));
+    file_write(f, *header.num_storage_buffers, size_of(u8));
+    file_write(f, *header.num_uniforms, size_of(u8));
+    file_write(f, *header.code_len, size_of(u32));
+
+    // Write data
+    file_write(f, code.data, code.count);
 }
 
 write_model :: (f: *File, file_data: string) #compile_time
@@ -231,6 +282,34 @@ read_obj :: (file_contents: string) -> Obj_Data #compile_time
     data.indices = indices;
     data.material = material_name;
     return data;
+}
+
+/// Runs shadercross and returns what it outputs. It requires an output path, so we point it to
+/// stdout and capture that instead of going through a file. Its logs go to stderr, so they don't mix in.
+/// @TODO: Windows has no /dev/stdout. Use a temporary file there when we bake DXIL.
+run_shadercross :: (source: string, dest: string) -> string, bool #compile_time
+{
+    result, output, error := run_command("shadercross", source, "-d", dest, "-o", "/dev/stdout",
+        capture_and_return_output = true, print_captured_output = false);
+
+    if result.exit_code != 0 {
+        compiler_report(tprint("Couldn't compile shader '%' to %:\n%", source, dest, error));
+        return "", false;
+    }
+    return output, true;
+}
+
+// Reads `"key": N` from shadercross' reflection JSON.
+reflected_count :: (json: string, key: string) -> u8 #compile_time
+{
+    pattern := tprint("\"%\":", key);
+    index := find_index_from_left(json, pattern);
+    if index < 0  return 0;
+
+    rest := json;
+    advance(*rest, index + pattern.count);
+    count := parse_int(*rest, u8, delimiters=",}");
+    return count;
 }
 
 Obj_Data :: struct {

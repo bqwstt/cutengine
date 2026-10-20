@@ -482,60 +482,43 @@ upload_instance_data :: (data: *Gpu_Renderer_Data, instances: []Render_Instance)
 // #region Shaders
 
 /// @TODO: This can be done at compile time, probably
-load_shader :: (device: *SDL_GPUDevice, path: string, num_samplers: u32 = 0, num_storage_buffers: u32 = 0, num_uniforms: u32 = 0) -> *SDL_GPUShader
+load_shader :: (device: *SDL_GPUDevice, name: string) -> *SDL_GPUShader
 {
+    shader, ok := load_shader_asset(name);
+    if !ok  return null;
+
     stage: SDL_GPUShaderStage;
-    if ends_with(path, ".vert")       stage = .VERTEX;
-    else if ends_with(path, ".frag")  stage = .FRAGMENT;
-    else {
-        log_error("Couldn't deduce shader stage from filename: %", path);
+    if shader.stage == {
+    case .VERTEX;   stage = .VERTEX;
+    case .FRAGMENT; stage = .FRAGMENT;
+    case;
+        log_error("Shader % is a % shader, which can't be used in a graphics pipeline", name, shader.stage);
         return null;
     }
 
-    // @FIXME: Relative path used here
-    full_path := path_join(to_string(SDL_GetBasePath()), "../assets/shader/out");
-
+    format: SDL_GPUShaderFormat;
     entrypoint: *u8;
-    format: SDL_GPUShaderFormat = SDL_GPU_SHADERFORMAT_INVALID;
-    backend_formats := SDL_GetGPUShaderFormats(device);
-
-    // Grab path + entrypoint depending on target API
-    if backend_formats & SDL_GPU_SHADERFORMAT_SPIRV {
-        // Vulkan
-        full_path = path_join(full_path, tprint("%.%", path, "spv"),, temp);
-        format = SDL_GPU_SHADERFORMAT_SPIRV;
-        entrypoint = "main";
-    } else if backend_formats & SDL_GPU_SHADERFORMAT_MSL {
-        // Metal
-        full_path = path_join(full_path, tprint("%.%", path, "msl"),, temp);
-        format = SDL_GPU_SHADERFORMAT_MSL;
-        entrypoint = "main0";
-    } else if backend_formats & SDL_GPU_SHADERFORMAT_DXIL {
-        // DirectX
-        full_path = path_join(full_path, tprint("%.%", path, "dxil"),, temp);
-        format = SDL_GPU_SHADERFORMAT_DXIL;
-        entrypoint = "main";
-    } else {
-        log_error("Couldn't find a supported shader format for backend %", SDL_GetGPUDeviceDriver(device));
-        return null;
+    if shader.backend == {
+    case .SPIRV; format = SDL_GPU_SHADERFORMAT_SPIRV; entrypoint = "main";
+    case .MSL;   format = SDL_GPU_SHADERFORMAT_MSL;   entrypoint = "main0"; // SPIRV-Cross renames main to main0
+    case .DXIL;  format = SDL_GPU_SHADERFORMAT_DXIL;  entrypoint = "main";
     }
 
-    code, ok := read_entire_file(full_path);
-    if !ok {
-        log_error("Couldn't load shader file from disk: %", full_path);
+    if !(SDL_GetGPUShaderFormats(device) & format) {
+        log_error("Shader % was baked for %, which the % driver doesn't support", name, shader.backend, to_string(SDL_GetGPUDeviceDriver(device)));
         return null;
     }
-    defer free(code);
 
     shader_info: SDL_GPUShaderCreateInfo;
-    shader_info.code_size = xx code.count;
-    shader_info.code = code.data;
+    shader_info.code_size = xx shader.code.count;
+    shader_info.code = shader.code.data;
     shader_info.entrypoint = entrypoint;
     shader_info.format = format;
     shader_info.stage = stage;
-    shader_info.num_samplers = num_samplers;
-    shader_info.num_storage_buffers = num_storage_buffers;
-    shader_info.num_uniform_buffers = num_uniforms;
+    shader_info.num_samplers = shader.num_samplers;
+    shader_info.num_storage_textures = shader.num_storage_textures;
+    shader_info.num_storage_buffers = shader.num_storage_buffers;
+    shader_info.num_uniform_buffers = shader.num_uniforms;
 
     return SDL_CreateGPUShader(device, *shader_info);
 }
@@ -543,11 +526,11 @@ load_shader :: (device: *SDL_GPUDevice, path: string, num_samplers: u32 = 0, num
 create_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice) -> *SDL_GPUGraphicsPipeline
 {
     // Load vertex and fragment shaders
-    vertex_shader := load_shader(device, "position.vert", num_uniforms = 2);
+    vertex_shader := load_shader(device, "position.vert");
     assert(vertex_shader != null, "Couldn't create vertex shader: %", SDL_GetErrorString());
     defer SDL_ReleaseGPUShader(device, vertex_shader);
 
-    fragment_shader := load_shader(device, "texture.frag", num_samplers = 1, num_uniforms = 1);
+    fragment_shader := load_shader(device, "texture.frag");
     assert(fragment_shader != null, "Couldn't create fragment shader: %", SDL_GetErrorString());
     defer SDL_ReleaseGPUShader(device, fragment_shader);
 
@@ -601,11 +584,11 @@ create_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice) -> *SDL_GPUGrap
 create_instanced_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice) -> *SDL_GPUGraphicsPipeline
 {
     // Load vertex and fragment shaders
-    vertex_shader := load_shader(device, "position_instanced.vert", num_storage_buffers = 1, num_uniforms = 2);
+    vertex_shader := load_shader(device, "position_instanced.vert");
     assert(vertex_shader != null, "Couldn't create vertex shader for instance pipeline: %", SDL_GetErrorString());
     defer SDL_ReleaseGPUShader(device, vertex_shader);
 
-    fragment_shader := load_shader(device, "texture.frag", num_samplers = 1, num_uniforms = 2);
+    fragment_shader := load_shader(device, "texture.frag");
     assert(fragment_shader != null, "Couldn't create fragment shader: %", SDL_GetErrorString());
     defer SDL_ReleaseGPUShader(device, fragment_shader);
 

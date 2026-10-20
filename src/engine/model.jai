@@ -24,6 +24,16 @@ Cpu_Texture :: struct {
     pitch:  u32;
 }
 
+Cpu_Shader :: struct {
+    stage:   Asset_Shader_Stage;
+    backend: Asset_Shader_Backend;
+    num_samplers:         u32;
+    num_storage_textures: u32;
+    num_storage_buffers:  u32;
+    num_uniforms:         u32;
+    code: string; // SPIR-V/DXIL bytecode or MSL source
+}
+
 Cpu_Model :: struct {
     meshes:   []Cpu_Mesh;
     material: Cpu_Material;
