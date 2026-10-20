@@ -36,8 +36,7 @@ build :: ()
 
     bake_shaders();
     convert_assets(force_asset_rebake);
-
-    print("\n");
+    if force_asset_rebake  print("\n");
 
     make_directory_if_it_does_not_exist(build_options.output_path);
 
