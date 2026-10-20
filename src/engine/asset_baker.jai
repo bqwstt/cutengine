@@ -10,16 +10,21 @@ parse_asset_type :: (filename: string, data: string) -> Asset_Type #compile_time
 }
 
 // Take hero.jpg, stone.png, tree.ase -> hero.ca, stone.ca, tree.ca
-write_asset :: (source_filepath: string) #compile_time
+write_asset :: (source_filepath: string, force := false) #compile_time
 {
     _, has_extension := path_extension(source_filepath);
     if !has_extension  return;
 
-    source_contents, source_ok := read_entire_file(source_filepath);
-    if !source_ok  return;
-
     target_filename := tprint("%.ca", path_filename(path_strip_extension(source_filepath)));
     target := path_join(ASSETS_DIR, target_filename); // ASSETS_DIR is defined in first.jai
+
+    // Skip assets that are already baked and haven't changed since.
+    source_time, _, source_time_ok := file_modtime_and_size(source_filepath);
+    target_time, _, target_time_ok := file_modtime_and_size(target);
+    if !force && source_time_ok && target_time_ok && target_time > source_time  return;
+
+    source_contents, source_ok := read_entire_file(source_filepath);
+    if !source_ok  return;
 
     // Check the type before opening the target: opening truncates it, so unsupported files
     // (cube.mtl next to cube.obj) would otherwise leave an empty .ca behind.
@@ -243,6 +248,7 @@ read_obj :: (file_contents: string) -> Obj_Data #compile_time
 
     vertices: [..]Vertex;
     indices:  [..]u32;
+    emitted:  Table(Vertex, u32, hash_vertex, compare_vertices); // Vertex -> its index in `vertices`
 
     for face: faces {
         // f 2/1/1 3/2/1 4/3/1
@@ -256,24 +262,12 @@ read_obj :: (file_contents: string) -> Obj_Data #compile_time
             v.texture_coords = ifx texture_coord_index >= 0 texture_coords[texture_coord_index] else .{};
 
             // Reuse an identical vertex if we already added one
-            // @FIXME: This probably is slow.
-            found := -1;
-            for existing, idx: vertices {
-                if existing.position == v.position
-                    && existing.normal == v.normal
-                    && existing.texture_coords == v.texture_coords
-                {
-                    found = idx;
-                    break;
-                }
-            }
-
-            if found >= 0 {
-                array_add(*indices, cast(u32) found);
-            } else {
-                array_add(*indices, cast(u32) vertices.count);  // index of the vertex we're about to add
+            index, newly_added := find_or_add(*emitted, v);
+            if newly_added {
+                index.* = cast(u32) vertices.count; // index of the vertex we're about to add
                 array_add(*vertices, v);
             }
+            array_add(*indices, index.*);
         }
     }
 
@@ -324,7 +318,19 @@ Face :: struct {
     normals:  [3]s32; // s32 as it can be -1
 }
 
+hash_vertex :: (v: Vertex) -> u32 {
+    // -0.0 == 0.0, but their bits differ. Make them match so equal vertices hash the same.
+    floats: []float = .{ size_of(Vertex) / size_of(float), xx *v };
+    for * floats  if it.* == 0  it.* = 0;
+    return sdbm_hash(*v, size_of(Vertex));
+}
+
+compare_vertices :: (a: Vertex, b: Vertex) -> bool {
+    return a.position == b.position && a.normal == b.normal && a.texture_coords == b.texture_coords;
+}
+
 #load "asset_format.jai";
 #load "model.jai"; // For Vertex
 
 #import "Hash";
+#import "Hash_Table";

@@ -14,13 +14,13 @@ build :: ()
     set_build_options_dc(.{do_output = false});
     set_working_directory(#filepath);
 
-    bake_assets := false;
+    force_asset_rebake := false;
     release := false;
     for build_options.compile_time_command_line {
         if it == {
             case "release"; release = true;
             case "debug";
-            case "bake_assets"; bake_assets = true;
+            case "bake_assets"; force_asset_rebake = true;
             case; compiler_report(tprint("Unknown argument '%'. Use 'debug' or 'release'.", it));
         }
     }
@@ -28,15 +28,14 @@ build :: ()
     if release {
         set_optimization(*build_options, .OPTIMIZED);
         build_options.output_path = "build_release";
-        bake_assets = true;
+        force_asset_rebake = true;
     } else {
         set_optimization(*build_options, .DEBUG);
         build_options.output_path = "build_debug";
     }
 
-    // Shaders are always baked, so editing one only needs a rebuild.
     bake_shaders();
-    if bake_assets  convert_assets();
+    convert_assets(force_asset_rebake);
 
     print("\n");
 
@@ -56,25 +55,25 @@ bake_shaders :: ()
     }
 
     visit_files(
-        dir_name=path_join(SHADER_DIR, "src"),
+        dir_name=SHADER_DIR,
         recursive=true,
         user_data=null,
         proc=shader_proc,
     );
 }
 
-convert_assets :: ()
+convert_assets :: (force_rebake: bool)
 {
-    convert_proc :: (info: *File_Visit_Info, data: *void) {
+    convert_proc :: (info: *File_Visit_Info, force_rebake: *bool) {
         if ends_with(info.full_name, ".ca")  return;
         if ends_with(info.full_name, ".hlsl")  return; // Baked on every build by bake_shaders()
-        write_asset(info.full_name);
+        write_asset(info.full_name, force_rebake.*);
     }
 
     visit_files(
         dir_name=ASSETS_DIR,
         recursive=true,
-        user_data=null,
+        user_data=*force_rebake,
         proc=convert_proc,
     );
 }

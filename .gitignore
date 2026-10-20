@@ -4,4 +4,4 @@ build_release/
 lib/
 assets/
 
-!assets/shader/src/*
+!assets/shader/*
