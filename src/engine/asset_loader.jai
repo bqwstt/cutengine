@@ -14,8 +14,15 @@ load_texture_asset :: (asset: string) -> Cpu_Texture, bool
     texture: Cpu_Texture;
     texture.height = height;
     texture.width  = width;
-    texture.pitch  = width * cast(u8) format;
     texture.pixels = bytes;
+
+    if format == {
+    case .RGBA8; texture.pitch = width * 4;
+    case;
+        log_error("Unsupported texture format % in '%'", format, asset);
+        return .{}, false;
+    }
+
     return texture, true;
 }
 
