@@ -6,12 +6,13 @@ renderer_init :: (window: *Window, backend: Backend_Kind, width: s32, height: s3
     ren.backend = backend;
     ren.window = window;
 
+    // Initialize GPU data
     if #complete backend == {
     case .SDL_GPU;
         data, ok := sdl_gpu_renderer_make(window);
         if !ok  return .{}, false;
 
-        ren.gpu_data = data;
+        ren.sdl_gpu_data = data;
     }
 
     return ren, true;
@@ -20,7 +21,7 @@ renderer_init :: (window: *Window, backend: Backend_Kind, width: s32, height: s3
 renderer_drop :: (using ren: *Renderer)
 {
     if #complete backend == {
-    case .SDL_GPU; sdl_gpu_renderer_drop(window, *gpu_data);
+    case .SDL_GPU; sdl_gpu_renderer_drop(window, *sdl_gpu_data);
     }
 
     ren.* = .{};
@@ -29,7 +30,7 @@ renderer_drop :: (using ren: *Renderer)
 renderer_execute_commands :: (using ren: *Renderer, list: *Render_List)
 {
     if #complete backend == {
-    case .SDL_GPU; sdl_gpu_renderer_execute_commands(window, *gpu_data, list);
+    case .SDL_GPU; sdl_gpu_renderer_execute_commands(window, *sdl_gpu_data, list);
     }
 }
 
@@ -43,7 +44,7 @@ render_list_begin :: (list: *Render_List, uniforms: Render_Uniforms)
 renderer_load_texture :: (using ren: *Renderer, texture: Cpu_Texture) -> Texture_Handle
 {
     if #complete backend == {
-    case .SDL_GPU; return sdl_gpu_upload_texture(*gpu_data, texture);
+    case .SDL_GPU; return sdl_gpu_upload_texture(*sdl_gpu_data, texture);
     }
 }
 
@@ -54,7 +55,7 @@ renderer_load_textures_using_material :: (using ren: *Renderer, material_data: C
 
     if #complete backend == {
     case .SDL_GPU;
-        material.albedo = sdl_gpu_upload_texture(*gpu_data, material_data.albedo);
+        material.albedo = sdl_gpu_upload_texture(*sdl_gpu_data, material_data.albedo);
     }
 
     return material;
@@ -63,7 +64,7 @@ renderer_load_textures_using_material :: (using ren: *Renderer, material_data: C
 renderer_load_mesh :: (using ren: *Renderer, mesh: Cpu_Mesh) -> Mesh_Handle
 {
     if #complete backend == {
-    case .SDL_GPU; return sdl_gpu_upload_mesh(*gpu_data, mesh);
+    case .SDL_GPU; return sdl_gpu_upload_mesh(*sdl_gpu_data, mesh);
     }
 }
 
@@ -108,7 +109,7 @@ Renderer :: struct {
 
     using data: Backend_Data;
     Backend_Data :: union backend: Backend_Kind {
-        .SDL_GPU ,, gpu_data: Gpu_Renderer_Data;
+        .SDL_GPU ,, sdl_gpu_data: Gpu_Renderer_Data;
     }
 }
 

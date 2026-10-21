@@ -50,13 +50,17 @@ load_model_asset :: (asset: string) -> Cpu_Model, bool
         // @TODO: This loads each file separately. Add a check for #if DEBUG once we have a packed asset path.
         // @TODO: Change this for a `load_material_asset` call, which parses all texture types.
         material.albedo, albedo_ok = load_texture_asset(material_name);
+
+        // No material, or its texture couldn't be loaded: use the missing texture so it stands out.
+        if !albedo_ok {
+            material.albedo, albedo_ok = load_texture_asset(DEFAULT_TEXTURE_ASSET_NAME);
+            assert(albedo_ok, "Couldn't load fallback texture '%'", DEFAULT_TEXTURE_ASSET_NAME);
+        }
+    } else {
+        // Load default material
+        material = DEFAULT_MATERIAL_DATA;
     }
 
-    // No material, or its texture couldn't be loaded: use the missing texture so it stands out.
-    if !albedo_ok {
-        material.albedo, albedo_ok = load_texture_asset(MISSING_TEXTURE);
-        assert(albedo_ok, "Couldn't load fallback texture '%'", MISSING_TEXTURE);
-    }
 
     model: Cpu_Model;
     model.meshes = meshes;
@@ -143,6 +147,13 @@ Asset_Reader :: struct {
 ASSETS_EXT  :: "ca";
 ASSETS_PATH :: #run path_join(#filepath, "../../assets/") ;
 
-MISSING_TEXTURE :: "missing_texture"; // Used when a model has no material or its texture can't be loaded
+// #region Asset defaults
+
+WHITE_PIXELS  :: u8.[255, 255, 255, 255];
+WHITE_TEXTURE :: Cpu_Texture.{ width = 1, height = 1, pixels = WHITE_PIXELS.data, pitch = 4 };
+DEFAULT_BASE_COLOR :: Vector4.{ 0.8, 0.8, 0.8, 1.0 };
+
+DEFAULT_TEXTURE_ASSET_NAME :: "missing_texture";  // Used when a model can't load its texture
+DEFAULT_MATERIAL_DATA :: Cpu_Material.{ albedo = WHITE_TEXTURE, base_color = DEFAULT_BASE_COLOR }; // Used when a model has no material
 
 #load "asset_format.jai";

@@ -5,11 +5,10 @@ struct Input {
 };
 
 struct Output {
-    float2 TexCoord:    TEXCOORD0;
-    float4 ObjectColor: TEXCOORD1;
-    float3 Normal:      TEXCOORD2;
-    float3 CurrentPos:  TEXCOORD3;
-    float4 Position:    SV_Position;
+    float2 TexCoord:   TEXCOORD0;
+    float3 Normal:     TEXCOORD1;
+    float3 CurrentPos: TEXCOORD2;
+    float4 Position:   SV_Position;
 };
 
 cbuffer World  : register(b0, space1) { row_major float4x4 view_proj; };
@@ -21,7 +20,6 @@ Output main(Input input)
 
     Output output;
     output.TexCoord = input.TexCoord;
-    output.ObjectColor = float4(1.0, 1.0, 1.0, 1.0);
     output.Normal = input.Normal;
     output.CurrentPos = world;
     output.Position = mul(view_proj, world);
