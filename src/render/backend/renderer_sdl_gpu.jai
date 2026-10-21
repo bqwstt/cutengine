@@ -69,6 +69,7 @@ sdl_gpu_renderer_drop :: (window: *Window, data: *Gpu_Renderer_Data)
     for * data.textures.data  SDL_ReleaseGPUTexture(data.device, it.texture);
     for * data.meshes.data  mesh_drop(data, it);
 
+    if data.depth_texture  SDL_ReleaseGPUTexture(data.device, data.depth_texture);
     SDL_ReleaseWindowFromGPUDevice(data.device, sdl_window);
     SDL_DestroyGPUDevice(data.device);
 }
@@ -374,6 +375,7 @@ renderer_begin_frame :: (window: *Window, data: *Gpu_Renderer_Data, list: *Rende
             num_levels = 1,
         };
 
+        if data.depth_texture  SDL_ReleaseGPUTexture(data.device, data.depth_texture); // Destroy old texture
         data.depth_texture = SDL_CreateGPUTexture(data.device, *depth_texture_create_info);
         assert(data.depth_texture != null, "Couldn't create depth texture: %", SDL_GetErrorString());
 
@@ -419,6 +421,7 @@ renderer_end_frame :: (frame: *Renderer_Frame)
 get_gpu_resource :: (data: *Gpu_Renderer_Data, $R: Type, handle: Handle) -> *R
 {
     // Check handle before returning ref
+    // @FIXME: This checks meshes.count, should really be the handle array check.
     if handle.index >= data.meshes.count  return null;
 
     resource: *R;

@@ -61,8 +61,8 @@ platform_poll_events :: (window: *Window, input: *Input)
         case .MOUSE_MOTION;
             input.mouse_pos.x = event.motion.x;
             input.mouse_pos.y = event.motion.y;
-            input.mouse_delta.x = event.motion.xrel;
-            input.mouse_delta.y = event.motion.yrel;
+            input.mouse_delta.x += event.motion.xrel;
+            input.mouse_delta.y += event.motion.yrel;
 	    }
 	}
 }

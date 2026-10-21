@@ -45,6 +45,7 @@ key_was_released :: (input: *Input, key: Keyboard_Key) -> bool { return was_rele
 
 reset_input :: inline (input: *Input)
 {
+    input.mouse_delta = Vector2.{ 0, 0 };
     input.mouse_scroll_wheel = 0.0;
     for *input.mouse_buttons  it.half_transitions = 0;
     for *input.keyboard_buttons  it.half_transitions = 0;
