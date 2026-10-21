@@ -151,9 +151,8 @@ ASSETS_PATH :: #run path_join(#filepath, "../../assets/") ;
 
 WHITE_PIXELS  :: u8.[255, 255, 255, 255];
 WHITE_TEXTURE :: Cpu_Texture.{ width = 1, height = 1, pixels = WHITE_PIXELS.data, pitch = 4 };
-DEFAULT_BASE_COLOR :: Vector4.{ 0.8, 0.8, 0.8, 1.0 };
 
 DEFAULT_TEXTURE_ASSET_NAME :: "missing_texture";  // Used when a model can't load its texture
-DEFAULT_MATERIAL_DATA :: Cpu_Material.{ albedo = WHITE_TEXTURE, base_color = DEFAULT_BASE_COLOR }; // Used when a model has no material
+DEFAULT_MATERIAL_DATA :: Cpu_Material.{ albedo = WHITE_TEXTURE }; // Used when a model has no material
 
 #load "asset_format.jai";

@@ -41,7 +41,13 @@ Cpu_Model :: struct {
 
 Cpu_Material :: struct {
     albedo:     Cpu_Texture;
-    base_color: Vector4 = .{ 1.0, 1.0, 1.0, 1.0 };
+    properties: Material_Properties;
+}
+
+Material_Properties :: struct {
+    base_color:         Vector4 = .{ 0.8, 0.8, 0.8, 1.0 }; // Grey-ish color
+    specular_intensity: float = 1.0;
+    shininess:          u32 = 1;
 }
 
 Vertex :: struct {

@@ -3,12 +3,21 @@ game_init :: (state: *Game_State, renderer: *Renderer)
     state.camera = camera_make(renderer.window);
     state.light.position = Vector3.{ 10, 10, 10 };
 
-    tent_asset, ok := load_model_asset("tent.ca");
+    tent_asset, ok := load_model_asset("tent");
     assert(ok, "Failed to load asset");
+
+    suzanne_asset := load_model_asset("suzanne");
+    suzanne_model := load_model(renderer, suzanne_asset);
+
+    suzanne_material: Material_Properties;
+    suzanne_material.base_color = Vector4.{ 0.9686, 0.8510, 0.7686, 1.0 };
+    suzanne_material.specular_intensity = 0.8;
+    suzanne_material.shininess = 32;
+    suzanne_model.material.properties = suzanne_material;
 
     tent_model := load_model(renderer, tent_asset);
     state.light.model = tent_model;
-    state.obj.model   = tent_model;
+    state.obj.model   = suzanne_model;
 
     camera_move(*state.camera, .{ 0, 0, 1 }); // Move the camera a bit back
 }
@@ -19,11 +28,19 @@ game_init :: (state: *Game_State, renderer: *Renderer)
 game_construct_render_list :: (list: *Render_List, prev_state: *Game_State, curr_state: *Game_State, alpha: float64)
 {
     uniforms: Render_Uniforms;
+
+    // Camera uniforms
+    _, inv_view := inverse(curr_state.camera.view_matrix);
+    uniforms.camera.position = Vector3.{ inv_view._14, inv_view._24, inv_view._34 };
     uniforms.camera.view_projection = curr_state.camera.projection_matrix * curr_state.camera.view_matrix;
-    uniforms.light.global_light.color = Vector4.{ 1.0, 1.0, 1.0, 1.0 };
+
+    // Light uniforms
+    uniforms.light.global_light.color = Vector4.{ 1.0, 0.0, 0.0, 1.0 };
     uniforms.light.global_light.position = curr_state.light.position;
+    uniforms.light.ambient_strength = 0.7;
 
     render_list_begin(list, uniforms);
+    list.clear_color = Vector4.{ 0.655, 0.847, 0.941, 1.0 };
 
     obj: Object;
     light: Object;

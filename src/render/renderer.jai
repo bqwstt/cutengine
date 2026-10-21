@@ -51,7 +51,9 @@ renderer_load_texture :: (using ren: *Renderer, texture: Cpu_Texture) -> Texture
 renderer_load_textures_using_material :: (using ren: *Renderer, material_data: Cpu_Material) -> Material
 {
     material: Material;
-    material.base_color = material_data.base_color;
+    material.properties.base_color = material_data.properties.base_color;
+    material.properties.specular_intensity = material_data.properties.specular_intensity;
+    material.properties.shininess = material_data.properties.shininess;
 
     if #complete backend == {
     case .SDL_GPU;
@@ -118,8 +120,9 @@ Renderer :: struct {
 // Follows Cpu_Texture's layout.
 Material :: struct {
     albedo:     Texture_Handle;
-    base_color: Vector4;
+    properties: Material_Properties;
 }
+#assert size_of(Material) % 16 == 0;
 
 // #region Render commands
 
@@ -163,11 +166,15 @@ Render_Uniforms :: struct {
 #assert size_of(Render_Uniforms) % 16 == 0;
 
 Render_Camera_Uniforms :: struct {
+    position:        Vector3;
+    _padding:        float;
     view_projection: Matrix4;
 }
 
 Render_Light_Uniforms :: struct {
-    global_light: Light_Source;
+    global_light:     Light_Source;
+    ambient_strength: float;
+    _padding:         [3]float;
 }
 
 Draw_Indexed_Render_Command :: struct {

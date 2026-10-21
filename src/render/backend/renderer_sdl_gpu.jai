@@ -289,7 +289,7 @@ sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data,
                 SDL_BindGPUIndexBuffer(frame.pass, *index_binding, SDL_GPUIndexElementSize._32BIT);
                 SDL_BindGPUFragmentSamplers(frame.pass, 0, sampler_bindings.data, 1);
                 SDL_PushGPUVertexUniformData(frame.command_buffer, 1, *cmd.uniforms, size_of(cmd.Uniforms));
-                SDL_PushGPUFragmentUniformData(frame.command_buffer, 1, *cmd.material.base_color, size_of(Vector4));
+                SDL_PushGPUFragmentUniformData(frame.command_buffer, 1, *cmd.material.properties, size_of(Material_Properties));
                 SDL_DrawGPUIndexedPrimitives(frame.pass, mesh.index_count, 1, 0, 0, 0);
             case .DRAW_INDEXED_INSTANCES;
                 cmd := command.draw_indexed_instances;
@@ -315,7 +315,7 @@ sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data,
                 SDL_BindGPUIndexBuffer(frame.pass, *index_binding, SDL_GPUIndexElementSize._32BIT);
                 SDL_BindGPUFragmentSamplers(frame.pass, 0, sampler_bindings.data, 1);
                 SDL_PushGPUVertexUniformData(frame.command_buffer, 1, *cmd.uniforms, size_of(cmd.Uniforms));
-                SDL_PushGPUFragmentUniformData(frame.command_buffer, 1, *cmd.material.base_color, size_of(Vector4));
+                SDL_PushGPUFragmentUniformData(frame.command_buffer, 1, *cmd.material.properties, size_of(Material_Properties));
                 SDL_DrawGPUIndexedPrimitives(frame.pass, mesh.index_count, xx cmd.instances, 0, 0, 0);
             }
         }
