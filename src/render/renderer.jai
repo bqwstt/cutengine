@@ -138,7 +138,7 @@ Render_Command :: struct {
 // @TODO: Not sure if I like to have this here.
 Render_Instance :: struct {
     position: Vector3;
-    _padding: [1]u8;
+    _padding: float;
 }
 // For instanced drawing, shaders use 16-bit aligned float4s, so we need to make sure our struct is 16 bytes as well.
 #assert size_of(Render_Instance) % 16 == 0;
