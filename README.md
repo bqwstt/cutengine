@@ -43,6 +43,7 @@ Rendering aims for a stylized look, not photorealism.
 |--------------------------------------------------|:------:|
 | Forward rendering, depth testing                 | ✅     |
 | Instanced drawing                                | ✅     |
+| Shader hot reloading                             | ✅     |
 | Toon shading                                     | 🚧     |
 | HDR + tonemapping                                | 📋     |
 | Shadows                                          | 📋     |
@@ -110,6 +111,8 @@ Once the render list is populated, the engine can either (a) directly execute th
 This command list is populated every frame.
 
 ## Building
+Cutengine is built with Jai, so unfortunately you will need a working Jai compiler, which is in closed beta at the time of writing.
+
 Cutengine requires a [SDL3](https://wiki.libsdl.org/SDL3/FrontPage) dylib located in a `lib/` directory at the root of the repository. SDL 3.4.4 is a good patch to use.
 For cross-compiling shaders, [`SDL_shadercross`](https://github.com/libsdl-org/SDL_shadercross) is required.
 ```sh
