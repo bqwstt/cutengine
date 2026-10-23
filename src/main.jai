@@ -55,6 +55,16 @@ main :: ()
 
     render_list := New(Render_List);
 
+    shaders_changed: bool;
+    #if DEBUG {
+        // Reload shaders on file change
+        shader_watcher: File_Watcher(bool);
+        if !init(*shader_watcher, on_shader_change, *shaders_changed) || !add_directories(*shader_watcher, SHADER_DIR) {
+            log_error("Couldn't watch % for changes, press R to reload shaders", SHADER_DIR);
+        }
+        defer deinit(shader_watcher);
+    }
+
     // #region 0-allocs
     // Use trap allocator from now on, no more accidental allocations after this!
     // (Any alloc will now need to pass in either `,,permament_allocator` or `,,transient_allocator`.)
@@ -81,7 +91,12 @@ main :: ()
         platform_poll_events(*window, *input);
 
         if key_was_pressed(*input, .ESCAPE)  break;
-        if key_was_pressed(*input, .R) renderer_reload_shaders(*renderer);
+
+        #if DEBUG  process_changes(*shader_watcher);
+        if key_was_pressed(*input, .R) || shaders_changed {
+            renderer_reload_shaders(*renderer);
+            shaders_changed = false;
+        }
 
         frame_acc += frame_time;
         ticks := cast(int) floor(frame_acc / DELTA_WANTED);
@@ -109,6 +124,11 @@ main :: ()
     #if DEBUG report_memory_leaks();
 }
 
+on_shader_change :: (watcher: *File_Watcher(bool), change: *File_Change, shaders_changed: *bool)
+{
+    if ends_with(change.full_path, ".hlsl")  shaders_changed.* = true;
+}
+
 KiB :: 1024;
 MiB :: 1024 * KiB;
 GiB :: 1024 * MiB;
@@ -131,3 +151,4 @@ SHADER_DIR :: #run path_join(ASSETS_DIR, "shader");
 #load "game/game.jai";
 
 #import "Basic"()(MEMORY_DEBUGGER = DEBUG); // Enable memory debugger on debug buids.
+#import "File_Watcher";
