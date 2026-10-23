@@ -32,15 +32,7 @@ sdl_gpu_renderer_make :: (window: *Window) -> Gpu_Renderer_Data, bool
     sampler := SDL_CreateGPUSampler(device, *pixel_sampler_create_info);
     assert(sampler != null, "Couldn't create sampler: %", SDL_GetErrorString());
 
-    pipeline := create_pipeline(sdl_window, device);
-    instanced_pipeline := create_instanced_pipeline(sdl_window, device);
-    if !pipeline || !instanced_pipeline {
-        log_error("Couldn't create graphics pipelines: %", SDL_GetErrorString());
-        return .{}, false;
-    }
-
     // Create GPU buffer for storing batch instances positions
-    INSTANCE_BUFFER_SIZE :: MAX_RENDER_INSTANCES * size_of(Render_Instance);
     instance_data_info := SDL_GPUBufferCreateInfo.{
         usage = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ,
         size = cast(u32) INSTANCE_BUFFER_SIZE,
@@ -51,20 +43,26 @@ sdl_gpu_renderer_make :: (window: *Window) -> Gpu_Renderer_Data, bool
 
     data: Gpu_Renderer_Data;
     data.device = device;
-    data.pipeline = pipeline;
     data.pixel_sampler = sampler;
-    data.instanced_pipeline = instanced_pipeline;
     data.instance_buffer = instance_buffer;
+
+    // Create graphics pipelines
+    for pipeline_desc: PIPELINES {
+        pipeline := create_pipeline(sdl_window, device, pipeline_desc);
+        if !pipeline  log_error("Couldn't load graphics pipeline '%': %", pipeline, SDL_GetErrorString());
+        data.pipelines[it_index] = pipeline;
+    }
+
     return data, true;
 }
 
 sdl_gpu_renderer_drop :: (window: *Window, data: *Gpu_Renderer_Data)
 {
     sdl_window := convert_to_sdl_window(window);
-    SDL_ReleaseGPUGraphicsPipeline(data.device, data.pipeline);
-    SDL_ReleaseGPUGraphicsPipeline(data.device, data.instanced_pipeline);
     SDL_ReleaseGPUBuffer(data.device, data.instance_buffer);
     SDL_ReleaseGPUSampler(data.device, data.pixel_sampler);
+
+    for pipeline: data.pipelines  SDL_ReleaseGPUGraphicsPipeline(data.device, pipeline);
 
     for * data.textures.data  SDL_ReleaseGPUTexture(data.device, it.texture);
     for * data.meshes.data  mesh_drop(data, it);
@@ -284,7 +282,7 @@ sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data,
                     },
                 ];
 
-                SDL_BindGPUGraphicsPipeline(frame.pass, data.pipeline);
+                SDL_BindGPUGraphicsPipeline(frame.pass, data.pipelines[Pipeline_Id.OPAQUE_FLAT]);
                 SDL_BindGPUVertexBuffers(frame.pass, 0, *vertex_binding, 1);
                 SDL_BindGPUIndexBuffer(frame.pass, *index_binding, SDL_GPUIndexElementSize._32BIT);
                 SDL_BindGPUFragmentSamplers(frame.pass, 0, sampler_bindings.data, 1);
@@ -309,7 +307,7 @@ sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data,
                     },
                 ];
 
-                SDL_BindGPUGraphicsPipeline(frame.pass, data.instanced_pipeline);
+                SDL_BindGPUGraphicsPipeline(frame.pass, data.pipelines[Pipeline_Id.OPAQUE_INSTANCED]);
                 SDL_BindGPUVertexBuffers(frame.pass, 0, *vertex_binding, 1);
                 SDL_BindGPUVertexStorageBuffers(frame.pass, 0, *data.instance_buffer, 1);
                 SDL_BindGPUIndexBuffer(frame.pass, *index_binding, SDL_GPUIndexElementSize._32BIT);
@@ -325,9 +323,8 @@ sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data,
 }
 
 Gpu_Renderer_Data :: struct {
-    device:   *SDL_GPUDevice;
-    pipeline: *SDL_GPUGraphicsPipeline;
-    instanced_pipeline: *SDL_GPUGraphicsPipeline;
+    device:    *SDL_GPUDevice;
+    pipelines: [PIPELINES.count] *SDL_GPUGraphicsPipeline;
 
     depth_texture:    *SDL_GPUTexture;
     depth_w, depth_h: u32;
@@ -528,15 +525,15 @@ load_shader :: (device: *SDL_GPUDevice, name: string) -> *SDL_GPUShader
     return SDL_CreateGPUShader(device, *shader_info);
 }
 
-create_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice) -> *SDL_GPUGraphicsPipeline
+create_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice, desc: Pipeline_Desc) -> *SDL_GPUGraphicsPipeline
 {
     // Load vertex and fragment shaders
-    vertex_shader := load_shader(device, "position.vert");
-    assert(vertex_shader != null, "Couldn't create vertex shader: %", SDL_GetErrorString());
+    vertex_shader := load_shader(device, desc.vert_shader);
+    if !vertex_shader  return null;
     defer SDL_ReleaseGPUShader(device, vertex_shader);
 
-    fragment_shader := load_shader(device, "texture.frag");
-    assert(fragment_shader != null, "Couldn't create fragment shader: %", SDL_GetErrorString());
+    fragment_shader := load_shader(device, desc.frag_shader);
+    if !fragment_shader  return null;
     defer SDL_ReleaseGPUShader(device, fragment_shader);
 
     color_target_description := SDL_GPUColorTargetDescription.[.{
@@ -569,56 +566,6 @@ create_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice) -> *SDL_GPUGrap
         primitive_type = .TRIANGLELIST,
         rasterizer_state = SDL_GPURasterizerState.{
             fill_mode = .FILL,
-        },
-        target_info = SDL_GPUGraphicsPipelineTargetInfo.{
-            color_target_descriptions = color_target_description.data,
-            num_color_targets = color_target_description.count,
-            depth_stencil_format = get_supported_depth_format(device),
-            has_depth_stencil_target = true,
-        },
-        depth_stencil_state = SDL_GPUDepthStencilState.{
-            compare_op = .LESS,
-            enable_depth_test = true,
-            enable_depth_write = true,
-        }
-    };
-
-    return SDL_CreateGPUGraphicsPipeline(device, *pci);
-}
-
-create_instanced_pipeline :: (window: *SDL_Window, device: *SDL_GPUDevice) -> *SDL_GPUGraphicsPipeline
-{
-    // Load vertex and fragment shaders
-    vertex_shader := load_shader(device, "position_instanced.vert");
-    assert(vertex_shader != null, "Couldn't create vertex shader for instance pipeline: %", SDL_GetErrorString());
-    defer SDL_ReleaseGPUShader(device, vertex_shader);
-
-    fragment_shader := load_shader(device, "texture.frag");
-    assert(fragment_shader != null, "Couldn't create fragment shader: %", SDL_GetErrorString());
-    defer SDL_ReleaseGPUShader(device, fragment_shader);
-
-    color_target_description := SDL_GPUColorTargetDescription.[.{
-        format = SDL_GetGPUSwapchainTextureFormat(device, window),
-        blend_state = .{
-            enable_blend = true,
-            color_blend_op = .ADD,
-            alpha_blend_op = .ADD,
-            src_color_blendfactor = .SRC_ALPHA,
-            dst_color_blendfactor = .ONE_MINUS_SRC_ALPHA,
-            src_alpha_blendfactor = .SRC_ALPHA,
-            dst_alpha_blendfactor = .ONE_MINUS_SRC_ALPHA,
-        }
-    }];
-
-    pci := SDL_GPUGraphicsPipelineCreateInfo.{
-        primitive_type = .TRIANGLELIST,
-        vertex_shader = vertex_shader,
-        fragment_shader = fragment_shader,
-        vertex_input_state = SDL_GPUVertexInputState.{
-            vertex_buffer_descriptions = VERTEX_BUFFER_DESCRIPTIONS.data,
-            num_vertex_buffers = VERTEX_BUFFER_DESCRIPTIONS.count,
-            vertex_attributes = VERTEX_ATTRIBUTES.data,
-            num_vertex_attributes = VERTEX_ATTRIBUTES.count
         },
         target_info = SDL_GPUGraphicsPipelineTargetInfo.{
             color_target_descriptions = color_target_description.data,
@@ -691,6 +638,26 @@ Gpu_Texture :: struct {
     texture: *SDL_GPUTexture;
 }
 
+Pipeline_Id :: enum u8 {
+    OPAQUE_FLAT;
+    OPAQUE_INSTANCED;
+}
+PIPELINE_COUNT :: #run enum_highest_value(Pipeline_Id) + 1;
+
+Pipeline_Desc :: struct {
+    vert_shader: string;
+    frag_shader: string;
+}
+
+// Simple map from id -> desc
+PIPELINES :: #run -> [PIPELINE_COUNT] Pipeline_Desc {
+    descriptions: [PIPELINE_COUNT] Pipeline_Desc;
+    descriptions[Pipeline_Id.OPAQUE_FLAT]      = .{ vert_shader = "position.vert", frag_shader = "texture.frag" };
+    descriptions[Pipeline_Id.OPAQUE_INSTANCED] = .{ vert_shader = "position_instanced.vert", frag_shader = "texture.frag" };
+
+    return descriptions;
+}
+
 // What am I going to send?
 VERTEX_BUFFER_DESCRIPTIONS :: SDL_GPUVertexBufferDescription.[
     .{ slot = 0, pitch = size_of(Vertex), input_rate = .VERTEX, instance_step_rate = 0 }
@@ -698,6 +665,8 @@ VERTEX_BUFFER_DESCRIPTIONS :: SDL_GPUVertexBufferDescription.[
 
 VERTEX_ATTRIBUTES_COUNT :: #run field_count(Vertex);
 VERTEX_ATTRIBUTES :: #run make_vertex_attributes(Vertex); // How is the thing I am going to send look like?
+
+INSTANCE_BUFFER_SIZE :: MAX_RENDER_INSTANCES * size_of(Render_Instance);
 
 field_count :: ($T: Type) -> int #compile_time
 #modify {
