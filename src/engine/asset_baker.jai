@@ -1,4 +1,4 @@
-parse_asset_type :: (filename: string, data: string) -> Asset_Type #compile_time
+parse_asset_type :: (filename: string, data: string) -> Asset_Type
 {
     type: Asset_Type = .NOT_SUPPORTED;
     is_img := stbi_info_from_memory(data.data, cast(s32) data.count, null, null, null);
@@ -10,20 +10,20 @@ parse_asset_type :: (filename: string, data: string) -> Asset_Type #compile_time
 }
 
 // Take hero.jpg, stone.png, tree.ase -> hero.ca, stone.ca, tree.ca
-write_asset :: (source_filepath: string, force := false) #compile_time
+write_asset :: (source_filepath: string, force := false)
 {
     _, has_extension := path_extension(source_filepath);
     if !has_extension  return;
 
     target_filename := tprint("%.ca", path_filename(path_strip_extension(source_filepath)));
-    target := path_join(ASSETS_DIR, target_filename); // ASSETS_DIR is defined in first.jai
+    target := path_join(ASSETS_DIR, target_filename,, temp); // ASSETS_DIR is defined in first.jai
 
     // Skip assets that are already baked and haven't changed since.
     source_time, _, source_time_ok := file_modtime_and_size(source_filepath);
     target_time, _, target_time_ok := file_modtime_and_size(target);
     if !force && source_time_ok && target_time_ok && target_time > source_time  return;
 
-    source_contents, source_ok := read_entire_file(source_filepath);
+    source_contents, source_ok := read_entire_file(source_filepath,, temp);
     if !source_ok  return;
 
     // Check the type before opening the target: opening truncates it, so unsupported files
@@ -64,7 +64,7 @@ write_asset :: (source_filepath: string, force := false) #compile_time
 
 #scope_file
 
-write_texture :: (f: *File, file_data: string) #compile_time
+write_texture :: (f: *File, file_data: string)
 {
     width: s32;
     height: s32;
@@ -103,7 +103,7 @@ write_texture :: (f: *File, file_data: string) #compile_time
     file_write(f, pixels, byte_count);
 }
 
-write_shader :: (f: *File, source_filepath: string) #compile_time
+write_shader :: (f: *File, source_filepath: string)
 {
     name := path_filename(path_strip_extension(source_filepath)); // texture.frag.hlsl -> texture.frag
 
@@ -150,11 +150,11 @@ write_shader :: (f: *File, source_filepath: string) #compile_time
     file_write(f, code.data, code.count);
 }
 
-write_model :: (f: *File, file_data: string) #compile_time
+write_model :: (f: *File, file_data: string)
 {
     // Read source data
     // @TODO: Check format instead of assuming it's obj
-    obj_data := read_obj(file_data);
+    obj_data := read_obj(file_data,, temp);
     vertices := obj_data.vertices;
     indices  := obj_data.indices;
     material := obj_data.material;
@@ -181,10 +181,8 @@ write_model :: (f: *File, file_data: string) #compile_time
 /// Load an .obj model from a filepath. Currently reads vertices (`v` components) and faces (`f` components).
 /// There is no support for materials.
 /// @FIXME: This is too slow.
-read_obj :: (file_contents: string) -> Obj_Data #compile_time
+read_obj :: (file_contents: string) -> Obj_Data
 {
-    context.allocator = temp;
-
     positions: [..]Vector3;
     normals:   [..]Vector3;
     texture_coords: [..]Vector2;
@@ -281,20 +279,20 @@ read_obj :: (file_contents: string) -> Obj_Data #compile_time
 /// Runs shadercross and returns what it outputs. It requires an output path, so we point it to
 /// stdout and capture that instead of going through a file. Its logs go to stderr, so they don't mix in.
 /// @TODO: Windows has no /dev/stdout. Use a temporary file there when we bake DXIL.
-run_shadercross :: (source: string, dest: string) -> string, bool #compile_time
+run_shadercross :: (source: string, dest: string) -> string, bool
 {
     result, output, error := run_command("shadercross", source, "-d", dest, "-o", "/dev/stdout",
         capture_and_return_output = true, print_captured_output = false);
 
     if result.exit_code != 0 {
-        compiler_report(tprint("Couldn't compile shader '%' to %:\n%", source, dest, error));
+        log_error("Couldn't compile shader '%' to %:\n%", source, dest, error);
         return "", false;
     }
     return output, true;
 }
 
 // Reads `"key": N` from shadercross' reflection JSON.
-reflected_count :: (json: string, key: string) -> u8 #compile_time
+reflected_count :: (json: string, key: string) -> u8
 {
     pattern := tprint("\"%\":", key);
     index := find_index_from_left(json, pattern);
@@ -329,8 +327,7 @@ compare_vertices :: (a: Vertex, b: Vertex) -> bool {
     return a.position == b.position && a.normal == b.normal && a.texture_coords == b.texture_coords;
 }
 
-#load "asset_format.jai";
-#load "model.jai"; // For Vertex
-
 #import "Hash";
 #import "Hash_Table";
+#import "Process";
+#import "Compiler";

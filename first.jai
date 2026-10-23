@@ -78,6 +78,8 @@ convert_assets :: (force_rebake: bool)
 }
 
 #load "src/engine/asset_baker.jai";
+#load "src/engine/asset_format.jai";
+#load "src/engine/model.jai"; // Baker needs the 'Vertex' definition
 
 #import "Basic";
 #import "Compiler";

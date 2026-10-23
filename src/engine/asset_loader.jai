@@ -93,7 +93,7 @@ load_asset_begin :: (asset: string) -> Asset_Reader, bool
 {
     // Add the extension ourselves. Only strip `.ca`, as shader names have dots in them (texture.frag).
     name := ifx path_extension(asset) == ASSETS_EXT  asset else tprint("%.%", asset, ASSETS_EXT);
-    full_path := path_join(ASSETS_PATH, name);
+    full_path := path_join(ASSETS_PATH, name,, context.per_frame_allocator);
     file, ok := read_entire_file(full_path,, context.transient_allocator);
     if !ok {
         log_error("Couldn't read asset from '%'", asset);
@@ -156,3 +156,5 @@ DEFAULT_TEXTURE_ASSET_NAME :: "missing_texture";  // Used when a model can't loa
 DEFAULT_MATERIAL_DATA :: Cpu_Material.{ albedo = WHITE_TEXTURE }; // Used when a model has no material
 
 #load "asset_format.jai";
+
+#import "File_Utilities";

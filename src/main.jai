@@ -81,6 +81,7 @@ main :: ()
         platform_poll_events(*window, *input);
 
         if key_was_pressed(*input, .ESCAPE)  break;
+        if key_was_pressed(*input, .R) renderer_reload_shaders(*renderer);
 
         frame_acc += frame_time;
         ticks := cast(int) floor(frame_acc / DELTA_WANTED);
@@ -122,6 +123,7 @@ SHADER_DIR :: #run path_join(ASSETS_DIR, "shader");
 #load "utils/fixed_array.jai";
 #load "platform/platform.jai";
 #load "platform/platform_sdl.jai"; // @FIXME: Load depending on platform wanted
+#load "engine/asset_baker.jai";
 #load "engine/asset_loader.jai";
 #load "engine/scene.jai";
 #load "engine/model.jai";

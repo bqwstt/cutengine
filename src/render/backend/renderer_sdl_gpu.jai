@@ -49,7 +49,7 @@ sdl_gpu_renderer_make :: (window: *Window) -> Gpu_Renderer_Data, bool
     // Create graphics pipelines
     for pipeline_desc: PIPELINES {
         pipeline := create_pipeline(sdl_window, device, pipeline_desc);
-        if !pipeline  log_error("Couldn't load graphics pipeline '%': %", pipeline, SDL_GetErrorString());
+        if !pipeline  log_error("Couldn't load graphics pipeline '%'", cast(Pipeline_Id) it_index);
         data.pipelines[it_index] = pipeline;
     }
 
@@ -253,6 +253,21 @@ sdl_gpu_upload_mesh :: (data: *Gpu_Renderer_Data, mesh_data: Cpu_Mesh) -> Mesh_H
     return gpu_mesh.handle;
 }
 
+sdl_gpu_reload_shaders :: (window: *Window, data: *Gpu_Renderer_Data)
+{
+    for pipeline_desc: PIPELINES {
+        pipeline := create_pipeline(convert_to_sdl_window(window), data.device, pipeline_desc);
+        if !pipeline {
+            log_error("Couldn't reload graphics pipeline '%', keeping old one", cast(Pipeline_Id) it_index);
+            continue;
+        }
+
+        // Release old pipeline and move new one
+        SDL_ReleaseGPUGraphicsPipeline(data.device, data.pipelines[it_index]);
+        data.pipelines[it_index] = pipeline;
+    }
+}
+
 sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data, list: *Render_List)
 {
     frame, ok := renderer_begin_frame(window, data, list);
@@ -266,6 +281,7 @@ sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data,
             if #complete command.kind == {
             case .DRAW_INDEXED;
                 cmd := command.draw_indexed;
+                if !data.pipelines[cmd.pipeline]  continue; // Shader failed to load
 
                 // Grab GPU mesh and bind buffers and samplers
                 mesh: *Gpu_Mesh = get_gpu_resource(data, Gpu_Mesh, cmd.mesh);
@@ -282,7 +298,7 @@ sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data,
                     },
                 ];
 
-                SDL_BindGPUGraphicsPipeline(frame.pass, data.pipelines[Pipeline_Id.OPAQUE_FLAT]);
+                SDL_BindGPUGraphicsPipeline(frame.pass, data.pipelines[cmd.pipeline]);
                 SDL_BindGPUVertexBuffers(frame.pass, 0, *vertex_binding, 1);
                 SDL_BindGPUIndexBuffer(frame.pass, *index_binding, SDL_GPUIndexElementSize._32BIT);
                 SDL_BindGPUFragmentSamplers(frame.pass, 0, sampler_bindings.data, 1);
@@ -291,6 +307,7 @@ sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data,
                 SDL_DrawGPUIndexedPrimitives(frame.pass, mesh.index_count, 1, 0, 0, 0);
             case .DRAW_INDEXED_INSTANCES;
                 cmd := command.draw_indexed_instances;
+                if !data.pipelines[cmd.pipeline]  continue; // Shader failed to load
 
                 // Grab GPU mesh and bind buffers and samplers
                 mesh: *Gpu_Mesh = get_gpu_resource(data, Gpu_Mesh, cmd.mesh);
@@ -307,7 +324,7 @@ sdl_gpu_renderer_execute_commands :: (window: *Window, data: *Gpu_Renderer_Data,
                     },
                 ];
 
-                SDL_BindGPUGraphicsPipeline(frame.pass, data.pipelines[Pipeline_Id.OPAQUE_INSTANCED]);
+                SDL_BindGPUGraphicsPipeline(frame.pass, data.pipelines[cmd.pipeline]);
                 SDL_BindGPUVertexBuffers(frame.pass, 0, *vertex_binding, 1);
                 SDL_BindGPUVertexStorageBuffers(frame.pass, 0, *data.instance_buffer, 1);
                 SDL_BindGPUIndexBuffer(frame.pass, *index_binding, SDL_GPUIndexElementSize._32BIT);
@@ -494,7 +511,7 @@ load_shader :: (device: *SDL_GPUDevice, name: string) -> *SDL_GPUShader
     case .VERTEX;   stage = .VERTEX;
     case .FRAGMENT; stage = .FRAGMENT;
     case;
-        log_error("Shader % is a % shader, which can't be used in a graphics pipeline", name, shader.stage);
+        log_error("Shader % is invalid", name);
         return null;
     }
 
@@ -638,26 +655,6 @@ Gpu_Texture :: struct {
     texture: *SDL_GPUTexture;
 }
 
-Pipeline_Id :: enum u8 {
-    OPAQUE_FLAT;
-    OPAQUE_INSTANCED;
-}
-PIPELINE_COUNT :: #run enum_highest_value(Pipeline_Id) + 1;
-
-Pipeline_Desc :: struct {
-    vert_shader: string;
-    frag_shader: string;
-}
-
-// Simple map from id -> desc
-PIPELINES :: #run -> [PIPELINE_COUNT] Pipeline_Desc {
-    descriptions: [PIPELINE_COUNT] Pipeline_Desc;
-    descriptions[Pipeline_Id.OPAQUE_FLAT]      = .{ vert_shader = "position.vert", frag_shader = "texture.frag" };
-    descriptions[Pipeline_Id.OPAQUE_INSTANCED] = .{ vert_shader = "position_instanced.vert", frag_shader = "texture.frag" };
-
-    return descriptions;
-}
-
 // What am I going to send?
 VERTEX_BUFFER_DESCRIPTIONS :: SDL_GPUVertexBufferDescription.[
     .{ slot = 0, pitch = size_of(Vertex), input_rate = .VERTEX, instance_step_rate = 0 }
@@ -665,8 +662,6 @@ VERTEX_BUFFER_DESCRIPTIONS :: SDL_GPUVertexBufferDescription.[
 
 VERTEX_ATTRIBUTES_COUNT :: #run field_count(Vertex);
 VERTEX_ATTRIBUTES :: #run make_vertex_attributes(Vertex); // How is the thing I am going to send look like?
-
-INSTANCE_BUFFER_SIZE :: MAX_RENDER_INSTANCES * size_of(Render_Instance);
 
 field_count :: ($T: Type) -> int #compile_time
 #modify {

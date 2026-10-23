@@ -70,6 +70,31 @@ renderer_load_mesh :: (using ren: *Renderer, mesh: Cpu_Mesh) -> Mesh_Handle
     }
 }
 
+renderer_reload_shaders :: (using ren: *Renderer)
+{
+    log_info("Reloading shaders");
+
+    #if DEBUG {
+        // On debug, hot-reload by writing assets files.
+        // Note that this proc only rewrites the shaders that actually changed, not all!
+        rewrite_proc :: (info: *File_Visit_Info, data: *void) {
+            if !ends_with(info.full_name, ".hlsl")  return;
+            write_asset(info.full_name);
+        }
+
+        visit_files(
+            dir_name=SHADER_DIR,
+            recursive=true,
+            user_data=null,
+            proc=rewrite_proc,
+        ,, context.per_frame_allocator);
+    }
+
+    if #complete backend == {
+    case .SDL_GPU; sdl_gpu_reload_shaders(window, *sdl_gpu_data);
+    }
+}
+
 render_draw_mesh :: (list: *Render_List, mesh: Mesh_Handle, material: Material, transform: Matrix4)
 {
     cmd := push_command(list, .DRAW_INDEXED);
@@ -77,7 +102,12 @@ render_draw_mesh :: (list: *Render_List, mesh: Mesh_Handle, material: Material, 
 
     uniforms: Draw_Indexed_Render_Command.Uniforms;
     uniforms.transform = transform;
-    cmd.draw_indexed = Draw_Indexed_Render_Command.{ mesh = mesh, material = material, uniforms = uniforms }; 
+    cmd.draw_indexed = Draw_Indexed_Render_Command.{
+        pipeline = .OPAQUE_FLAT, // @TODO: Make this an optional parameter if needed?
+        mesh = mesh,
+        material = material,
+        uniforms = uniforms
+    };
 }
 
 render_draw_mesh_instances :: (list: *Render_List, mesh: Mesh_Handle, material: Material, transform: Matrix4, instances: []Render_Instance)
@@ -92,6 +122,7 @@ render_draw_mesh_instances :: (list: *Render_List, mesh: Mesh_Handle, material: 
     uniforms: Draw_Indexed_Instanced_Render_Command.Uniforms;
     uniforms.transform = transform;
     cmd.draw_indexed_instances = Draw_Indexed_Instanced_Render_Command.{
+        pipeline = .OPAQUE_INSTANCED,
         mesh = mesh,
         material = material,
         uniforms = uniforms,
@@ -178,7 +209,8 @@ Render_Light_Uniforms :: struct {
 }
 
 Draw_Indexed_Render_Command :: struct {
-    mesh: Mesh_Handle;
+    pipeline: Pipeline_Id;
+    mesh:     Mesh_Handle;
     material: Material;
     uniforms: Uniforms;
 
@@ -193,8 +225,29 @@ Draw_Indexed_Instanced_Render_Command :: struct {
     instances: s64;
 }
 
+Pipeline_Id :: enum u8 {
+    OPAQUE_FLAT;
+    OPAQUE_INSTANCED;
+}
+PIPELINE_COUNT :: #run enum_highest_value(Pipeline_Id) + 1;
+
+Pipeline_Desc :: struct {
+    vert_shader: string;
+    frag_shader: string;
+}
+
+// Simple map from id -> desc
+PIPELINES :: #run -> [PIPELINE_COUNT] Pipeline_Desc {
+    descriptions: [PIPELINE_COUNT] Pipeline_Desc;
+    descriptions[Pipeline_Id.OPAQUE_FLAT]      = .{ vert_shader = "position.vert", frag_shader = "texture.frag" };
+    descriptions[Pipeline_Id.OPAQUE_INSTANCED] = .{ vert_shader = "position_instanced.vert", frag_shader = "texture.frag" };
+
+    return descriptions;
+}
+
 MAX_RENDER_COMMANDS :: 1024;
 MAX_RENDER_INSTANCES :: 16384;
+INSTANCE_BUFFER_SIZE :: MAX_RENDER_INSTANCES * size_of(Render_Instance);
 
 #scope_file
 
